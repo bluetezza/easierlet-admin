@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Retention — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Retention</h1>
+    <div class="sub">Tenants approaching or past their data-retention deadline. Anonymisation runs nightly.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Pending retention actions</div>
+        <div class="card-sub">Items with `retention_expires_at` due in the next 30 days, not yet anonymised.</div>
+      </div>
+      <button class="btn btn-secondary" id="reloadBtn">Reload</button>
+    </div>
+    <div id="retList"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">How this works</div>
+      </div>
+    </div>
+    <ul style="font-size:14px;color:var(--el-ink-soft);line-height:1.7;padding-left:20px">
+      <li><strong>30 days before:</strong> we email the landlord a warning. The tenant's record is still untouched.</li>
+      <li><strong>On the due date:</strong> personal fields are nulled out, the auth account is deleted, and a <code>retention.anonymised</code> entry is logged. For rejected applicants, the row is deleted entirely.</li>
+      <li><strong>Defer 30 days:</strong> push the deadline 30 days into the future and reset the warning. Use sparingly — needs a documented reason.</li>
+      <li><strong>Force anonymise / delete:</strong> sets the deadline to right now so the next nightly job processes it within hours.</li>
+    </ul>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("retention", admin);
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function load() {
+    $("retList").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("list_retention_pending");
+      const rows = data.tenants || [];
+      if (!rows.length) {
+        $("retList").innerHTML = `<div class="empty">Nothing due in the next 30 days. ✅</div>`;
+        return;
+      }
+      const today = Date.now();
+      $("retList").innerHTML = `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Expires</th><th>Warning sent</th><th>Deferred</th><th></th></tr></thead>
+          <tbody>${rows.map((r) => {
+            const days = r.retention_expires_at ? Math.round((new Date(r.retention_expires_at) - today) / 86400000) : null;
+            const dayPill = days === null ? "—"
+              : days < 0 ? `<span class="pill pill-red">${Math.abs(days)}d overdue</span>`
+              : days === 0 ? `<span class="pill pill-red">Today</span>`
+              : days <= 7 ? `<span class="pill pill-orange">${days}d</span>`
+              : `<span class="pill pill-blue">${days}d</span>`;
+            return `
+              <tr>
+                <td>${ADMIN.esc(r.full_name || "—")}</td>
+                <td>${ADMIN.esc(r.email || "—")}</td>
+                <td>${ADMIN.statusPill(r.status)}</td>
+                <td>${ADMIN.fmtDate(r.retention_expires_at)} ${dayPill}</td>
+                <td>${r.retention_warning_sent_at ? ADMIN.fmtDate(r.retention_warning_sent_at) : "<small style='color:var(--el-muted)'>not yet</small>"}</td>
+                <td>${r.retention_deferred_until ? ADMIN.fmtDate(r.retention_deferred_until) : "—"}</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn btn-secondary" data-defer="${ADMIN.esc(r.id)}">Defer 30d</button>
+                    <button class="btn btn-danger" data-force="${ADMIN.esc(r.id)}">Anonymise now</button>
+                  </div>
+                </td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      `;
+      document.querySelectorAll("[data-defer]").forEach((b) => b.addEventListener("click", async () => {
+        if (!confirm("Defer this anonymisation by 30 days? The action is logged.")) return;
+        await override(b.dataset.defer, "defer_30_days");
+      }));
+      document.querySelectorAll("[data-force]").forEach((b) => b.addEventListener("click", async () => {
+        if (!confirm("Force anonymise this tenant on the next nightly run? This cannot be undone once it executes.")) return;
+        await override(b.dataset.force, "force_anonymise");
+      }));
+    } catch (e) {
+      alertBox("error", e.message || "Couldn't load retention list.");
+    }
+  }
+
+  async function override(id, override) {
+    try {
+      await ADMIN.api("override_retention", { resource_type: "tenant", resource_id: id, override });
+      alertBox("success", `Override applied: ${override}`);
+      load();
+    } catch (e) {
+      alertBox("error", e.message || "Override failed.");
+    }
+  }
+
+  $("reloadBtn").addEventListener("click", load);
+  load();
+</script>
+
+</body>
+</html>

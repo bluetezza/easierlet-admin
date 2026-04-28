@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Sign in — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <span class="badge">ADMIN</span>
+    <h1>EasierLet Admin</h1>
+    <p class="sub">Mandatory two-factor authentication.</p>
+
+    <div class="alert" id="alertBox"></div>
+
+    <!-- Password step -->
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">Admin email</label>
+        <input type="email" id="email" autocomplete="email" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary" type="submit" id="loginBtn">Continue</button>
+    </form>
+
+    <!-- MFA challenge step -->
+    <form id="mfaForm" style="display:none">
+      <p class="sub">Enter the 6-digit code from your authenticator app.</p>
+      <div class="field">
+        <label for="mfaCode">6-digit code</label>
+        <input type="text" id="mfaCode" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required autofocus>
+      </div>
+      <button class="btn btn-primary" type="submit" id="mfaBtn">Verify</button>
+    </form>
+
+    <!-- MFA enrollment step (first-time admin) -->
+    <div id="enrollStep" style="display:none">
+      <p class="sub">Set up two-factor authentication to continue. Scan this QR code with Microsoft Authenticator (or any TOTP app), then enter the 6-digit code below.</p>
+      <div class="qr">
+        <img id="qrImg" alt="QR code" />
+        <div class="qr-secret" id="qrSecret"></div>
+      </div>
+      <form id="enrollVerifyForm">
+        <div class="field">
+          <label for="enrollCode">6-digit code from your app</label>
+          <input type="text" id="enrollCode" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" required>
+        </div>
+        <button class="btn btn-primary" type="submit" id="enrollVerifyBtn">Confirm &amp; sign in</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  // If already signed in at AAL2, skip straight to dashboard.
+  (async () => {
+    const { data } = await ADMIN.supabase.auth.getSession();
+    if (data?.session) {
+      const { data: aal } = await ADMIN.supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aal?.currentLevel === "aal2") window.location.replace("/dashboard.html");
+    }
+  })();
+
+  let stashedSession = null;     // session returned by login before MFA verify
+  let stashedFactorId = null;
+  let stashedChallengeId = null;
+  let enrollFactorId = null;
+
+  function showAlert(kind, msg) {
+    const a = $("alertBox");
+    a.className = `alert ${kind}`;
+    a.textContent = msg;
+  }
+  function clearAlert() { $("alertBox").className = "alert"; $("alertBox").textContent = ""; }
+
+  function showStep(step) {
+    $("loginForm").style.display = step === "login" ? "" : "none";
+    $("mfaForm").style.display = step === "mfa" ? "" : "none";
+    $("enrollStep").style.display = step === "enroll" ? "" : "none";
+  }
+
+  async function callAuth(action, body) {
+    const res = await fetch(`${ADMIN.SUPABASE_URL}/functions/v1/admin-auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "apikey": ADMIN.SUPABASE_ANON },
+      body: JSON.stringify({ action, ...body }),
+    });
+    return res.json();
+  }
+
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAlert();
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    const btn = $("loginBtn");
+    btn.disabled = true; btn.textContent = "Checking…";
+
+    const result = await callAuth("login", { email, password });
+    if (!result.ok) {
+      const map = {
+        invalid_credentials: "Email or password incorrect.",
+        not_admin: "This account isn't an admin.",
+        mfa_check_failed: "Couldn't check MFA — try again.",
+      };
+      showAlert("error", map[result.error] || result.message || "Sign-in failed.");
+      btn.disabled = false; btn.textContent = "Continue";
+      return;
+    }
+    stashedSession = result.session;
+    // Set the session client-side so subsequent enroll/verify calls have it.
+    await ADMIN.supabase.auth.setSession(stashedSession);
+
+    if (result.needs_enrollment) {
+      btn.disabled = false; btn.textContent = "Continue";
+      await beginEnrollment();
+      return;
+    }
+    if (result.mfa_required) {
+      stashedFactorId = result.factor_id;
+      stashedChallengeId = result.challenge_id;
+      showStep("mfa");
+      $("mfaCode").focus();
+      btn.disabled = false; btn.textContent = "Continue";
+      return;
+    }
+    // Shouldn't happen — MFA is mandatory.
+    showAlert("error", "Unexpected response. Refresh and try again.");
+    btn.disabled = false; btn.textContent = "Continue";
+  });
+
+  $("mfaForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAlert();
+    const code = $("mfaCode").value.trim();
+    const btn = $("mfaBtn");
+    btn.disabled = true; btn.textContent = "Verifying…";
+
+    const result = await callAuth("verify_mfa", {
+      session: stashedSession, factor_id: stashedFactorId, challenge_id: stashedChallengeId, code,
+    });
+    if (!result.ok) {
+      showAlert("error", result.message || "Invalid code.");
+      btn.disabled = false; btn.textContent = "Verify";
+      return;
+    }
+    if (result.session) {
+      // Upgraded session (aal2) — install it client-side.
+      await ADMIN.supabase.auth.setSession(result.session);
+    }
+    window.location.replace("/dashboard.html");
+  });
+
+  async function beginEnrollment() {
+    const result = await callAuth("enroll_mfa", { session: stashedSession });
+    if (!result.ok) {
+      showAlert("error", result.message || "Couldn't start MFA enrollment.");
+      return;
+    }
+    enrollFactorId = result.factor_id;
+    $("qrImg").src = result.qr_code;
+    $("qrSecret").textContent = result.secret;
+    showStep("enroll");
+    $("enrollCode").focus();
+  }
+
+  $("enrollVerifyForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAlert();
+    const code = $("enrollCode").value.trim();
+    const btn = $("enrollVerifyBtn");
+    btn.disabled = true; btn.textContent = "Confirming…";
+
+    // For first-time enroll, supabase-side TOTP enrollment requires a
+    // challenge → verify cycle. Issue a challenge then verify the code.
+    const ch = await ADMIN.supabase.auth.mfa.challenge({ factorId: enrollFactorId });
+    if (ch.error || !ch.data) {
+      showAlert("error", ch.error?.message || "Couldn't issue MFA challenge.");
+      btn.disabled = false; btn.textContent = "Confirm & sign in";
+      return;
+    }
+    const verify = await ADMIN.supabase.auth.mfa.verify({
+      factorId: enrollFactorId, challengeId: ch.data.id, code,
+    });
+    if (verify.error) {
+      showAlert("error", verify.error.message || "Invalid code.");
+      btn.disabled = false; btn.textContent = "Confirm & sign in";
+      return;
+    }
+    // Verified — session now AAL2.
+    window.location.replace("/dashboard.html");
+  });
+</script>
+
+</body>
+</html>

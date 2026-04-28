@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Settings — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Settings</h1>
+    <div class="sub">Your admin profile, MFA, and system health.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Your admin profile</div>
+      </div>
+    </div>
+    <div id="meBox"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Two-factor authentication</div>
+        <div class="card-sub">Mandatory for all admin sessions. Re-enrol if you've lost your authenticator.</div>
+      </div>
+    </div>
+    <div id="mfaBox"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">System health</div>
+        <div class="card-sub">Quick checks of RLS, retention queue, and recent errors.</div>
+      </div>
+      <button class="btn btn-secondary" id="runHealthBtn">Run check</button>
+    </div>
+    <div id="healthBox"><div class="empty">Click "Run check" to query the security-check Edge Function.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Helpful links</div>
+      </div>
+    </div>
+    <ul style="font-size:14px;color:var(--el-ink-soft);line-height:1.8;padding-left:20px">
+      <li><a href="https://supabase.com/dashboard/project/ffzknvcptqjlkxmkdxuk" target="_blank" rel="noopener">Supabase project dashboard ↗</a></li>
+      <li><a href="https://supabase.com/dashboard/project/ffzknvcptqjlkxmkdxuk/functions" target="_blank" rel="noopener">Edge Functions logs ↗</a></li>
+      <li><a href="https://dashboard.stripe.com/test/customers" target="_blank" rel="noopener">Stripe customers (test mode) ↗</a></li>
+      <li><a href="https://resend.com/emails" target="_blank" rel="noopener">Resend email logs ↗</a></li>
+    </ul>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("settings", admin);
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function loadProfile() {
+    $("meBox").innerHTML = `
+      <table class="table">
+        <tbody>
+          <tr><td><strong>Name</strong></td><td>${ADMIN.esc(admin.name)}</td></tr>
+          <tr><td><strong>Email</strong></td><td>${ADMIN.esc(admin.email)}</td></tr>
+          <tr><td><strong>Role</strong></td><td>${ADMIN.statusPill(admin.role)}</td></tr>
+          <tr><td><strong>Admin id</strong></td><td><code>${ADMIN.esc(admin.id)}</code></td></tr>
+        </tbody>
+      </table>
+    `;
+  }
+
+  async function loadMfaStatus() {
+    try {
+      const { data: factors } = await ADMIN.supabase.auth.mfa.listFactors();
+      const totp = factors?.totp ?? [];
+      if (!totp.length) {
+        $("mfaBox").innerHTML = `
+          <div class="alert warn">No TOTP factor enrolled. You shouldn't be here without MFA — contact support.</div>
+        `;
+        return;
+      }
+      $("mfaBox").innerHTML = `
+        <table class="table">
+          <thead><tr><th>Factor</th><th>Status</th><th>Created</th><th></th></tr></thead>
+          <tbody>${totp.map((f) => `
+            <tr>
+              <td>${ADMIN.esc(f.friendly_name || "TOTP")}</td>
+              <td>${f.status === "verified" ? '<span class="pill pill-green">Verified</span>' : '<span class="pill pill-orange">Unverified</span>'}</td>
+              <td>${ADMIN.fmtDate(f.created_at)}</td>
+              <td><button class="btn btn-danger" data-unenroll="${ADMIN.esc(f.id)}">Remove</button></td>
+            </tr>`).join("")}</tbody>
+        </table>
+        <div class="row-actions" style="margin-top:14px;justify-content:flex-start">
+          <button class="btn btn-secondary" id="reEnrollBtn">Enrol another authenticator</button>
+        </div>
+      `;
+      document.querySelectorAll("[data-unenroll]").forEach((b) => b.addEventListener("click", async () => {
+        if (!confirm("Remove this MFA factor? You'll need to enrol a new one before signing in again.")) return;
+        const { error } = await ADMIN.supabase.auth.mfa.unenroll({ factorId: b.dataset.unenroll });
+        if (error) alertBox("error", error.message);
+        else { alertBox("success", "Factor removed."); loadMfaStatus(); }
+      }));
+      $("reEnrollBtn")?.addEventListener("click", () => {
+        alertBox("info", "Sign out and sign back in — the login flow handles enrolment when no verified factor exists.");
+      });
+    } catch (e) {
+      $("mfaBox").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  }
+
+  $("runHealthBtn").addEventListener("click", async () => {
+    $("healthBox").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const { data: sess } = await ADMIN.supabase.auth.getSession();
+      const accessToken = sess?.session?.access_token;
+      const res = await fetch(`${ADMIN.SUPABASE_URL}/functions/v1/security-check`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": ADMIN.SUPABASE_ANON,
+          "Authorization": `Bearer ${accessToken}`,
+        },
+        body: "{}",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        $("healthBox").innerHTML = `<div class="alert error">${ADMIN.esc(json.message || "Health check failed.")}</div>`;
+        return;
+      }
+      $("healthBox").innerHTML = `
+        <div class="stats-grid">
+          ${json.checks.map((c) => `
+            <div class="stat-tile ${c.severity === 'fail' ? 'alert' : c.severity === 'warn' ? 'warn' : ''}">
+              <div class="label">${ADMIN.esc(c.name)}</div>
+              <div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${c.severity === 'pass' ? '✅ Pass' : c.severity === 'warn' ? '⚠️ Warn' : '❌ Fail'}</div>
+              <div class="sub">${ADMIN.esc(c.detail || '')}</div>
+            </div>`).join("")}
+        </div>
+      `;
+    } catch (e) {
+      $("healthBox").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  });
+
+  loadProfile();
+  loadMfaStatus();
+</script>
+
+</body>
+</html>

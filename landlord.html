@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Landlord — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <a href="/dashboard.html" style="color:var(--el-muted);font-size:13px;text-decoration:none">← All landlords</a>
+    <h1 id="lTitle">Loading…</h1>
+    <div class="sub" id="lSub">—</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="stats-grid" id="lStats"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Profile</div>
+      </div>
+    </div>
+    <div id="lProfile"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Subscription</div>
+        <div class="card-sub">Plan, status, trial, billing actions.</div>
+      </div>
+    </div>
+    <div id="lSub2"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Properties</div>
+      </div>
+    </div>
+    <div id="lProps"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Tenants</div>
+        <div class="card-sub">Names, status, dates only — no sensitive data without explicit drill-down.</div>
+      </div>
+    </div>
+    <div id="lTenants"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Documents</div>
+      </div>
+    </div>
+    <div id="lDocs"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Recent activity</div>
+        <div class="card-sub">Audit log entries where this landlord is the actor.</div>
+      </div>
+    </div>
+    <div id="lAudit"></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+
+  const params = new URLSearchParams(window.location.search);
+  const landlordId = params.get("id");
+  if (!landlordId) {
+    document.body.innerHTML = `<div class="empty">Missing landlord id.</div>`;
+    throw new Error("no id");
+  }
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function load() {
+    try {
+      const data = await ADMIN.api("view_landlord", { landlord_id: landlordId });
+      const p = data.profile || {};
+      $("lTitle").textContent = p.director_name || p.company_name || p.contact_email || "Landlord";
+      $("lSub").textContent = `${p.contact_email || ""} · ${p.company_name || "—"}`;
+
+      const sub = data.subscription;
+      const props = data.properties || [];
+      const tenants = data.tenants || [];
+      const docs = data.documents_summary || {};
+      const audits = data.recent_audit || [];
+
+      $("lStats").innerHTML = `
+        <div class="stat-tile"><div class="label">Properties</div><div class="value">${props.filter(p=>!p.archived).length}</div><div class="sub">${props.filter(p=>p.archived).length} archived</div></div>
+        <div class="stat-tile"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
+        <div class="stat-tile"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
+        <div class="stat-tile"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(sub?.plan || '—')}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
+      `;
+
+      $("lProfile").innerHTML = `
+        <table class="table">
+          <tbody>
+            <tr><td><strong>Director / contact</strong></td><td>${ADMIN.esc(p.director_name || '—')}</td></tr>
+            <tr><td><strong>Company</strong></td><td>${ADMIN.esc(p.company_name || '—')}</td></tr>
+            <tr><td><strong>Contact email</strong></td><td><a href="mailto:${ADMIN.esc(p.contact_email)}">${ADMIN.esc(p.contact_email || '—')}</a></td></tr>
+            <tr><td><strong>Contact phone</strong></td><td>${ADMIN.esc(p.contact_phone || '—')}</td></tr>
+            <tr><td><strong>Contact address</strong></td><td>${ADMIN.esc(p.contact_address || '—')}</td></tr>
+            <tr><td><strong>DPS scheme</strong></td><td>${ADMIN.esc(p.dps_scheme || '—')} ${p.dps_membership ? `<small>(${ADMIN.esc(p.dps_membership)})</small>` : ''}</td></tr>
+            <tr><td><strong>Onboarding</strong></td><td>${p.onboarding_completed_at ? 'Completed ' + ADMIN.fmtDateTime(p.onboarding_completed_at) : '<span class="pill pill-blue">In progress</span>'}</td></tr>
+            <tr><td><strong>Created</strong></td><td>${ADMIN.fmtDateTime(p.created_at)}</td></tr>
+          </tbody>
+        </table>
+      `;
+
+      $("lSub2").innerHTML = renderSubscription(sub);
+      $("lProps").innerHTML = renderProperties(props);
+      $("lTenants").innerHTML = renderTenants(tenants);
+      $("lDocs").innerHTML = renderDocs(docs);
+      $("lAudit").innerHTML = renderAudits(audits);
+
+      // Wire up extend trial
+      document.querySelectorAll("[data-extend]").forEach((b) => b.addEventListener("click", async () => {
+        const days = Number(b.dataset.extend);
+        b.disabled = true;
+        try {
+          await ADMIN.api("extend_trial", { landlord_id: landlordId, days });
+          alertBox("success", `Trial extended by ${days} days.`);
+          load();
+        } catch (e) {
+          alertBox("error", e.message || "Extension failed.");
+          b.disabled = false;
+        }
+      }));
+      document.getElementById("genDsarBtn")?.addEventListener("click", async () => {
+        const btn = document.getElementById("genDsarBtn");
+        btn.disabled = true; btn.textContent = "Generating…";
+        try {
+          const res = await ADMIN.api("generate_dsar", { user_id: landlordId, user_type: "landlord" });
+          if (res.download_url) {
+            window.open(res.download_url, "_blank", "noopener");
+          } else if (res.message) {
+            alertBox("warn", res.message);
+          }
+        } catch (e) {
+          alertBox("error", e.message || "DSAR failed.");
+        } finally {
+          btn.disabled = false; btn.textContent = "Generate DSAR";
+        }
+      });
+    } catch (e) {
+      alertBox("error", e.message || "Couldn't load landlord.");
+    }
+  }
+
+  function renderSubscription(sub) {
+    if (!sub) return `<div class="empty">No subscription record.</div>`;
+    const trial = sub.trial_ends_at ? Math.round((new Date(sub.trial_ends_at) - Date.now()) / 86400000) : null;
+    return `
+      <table class="table">
+        <tbody>
+          <tr><td><strong>Plan</strong></td><td>${ADMIN.esc(sub.plan)} · ${ADMIN.statusPill(sub.status)}</td></tr>
+          <tr><td><strong>Property limit</strong></td><td>${sub.property_limit ?? '—'}</td></tr>
+          ${sub.trial_ends_at ? `<tr><td><strong>Trial ends</strong></td><td>${ADMIN.fmtDate(sub.trial_ends_at)} ${trial >= 0 ? `(${trial} days)` : '<span class="pill pill-red">Expired</span>'}</td></tr>` : ''}
+          ${sub.current_period_end ? `<tr><td><strong>Renews</strong></td><td>${ADMIN.fmtDate(sub.current_period_end)}</td></tr>` : ''}
+          ${sub.stripe_customer_id ? `<tr><td><strong>Stripe customer</strong></td><td><code>${ADMIN.esc(sub.stripe_customer_id)}</code></td></tr>` : ''}
+        </tbody>
+      </table>
+      <div class="row-actions" style="margin-top:14px">
+        <button class="btn btn-secondary" data-extend="14">Extend trial 14 days</button>
+        <button class="btn btn-secondary" data-extend="30">Extend trial 30 days</button>
+        <button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button>
+      </div>
+    `;
+  }
+
+  function renderProperties(props) {
+    if (!props.length) return `<div class="empty">No properties.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>Address</th><th>Status</th><th>Created</th></tr></thead>
+        <tbody>${props.map((p) => `
+          <tr>
+            <td>${ADMIN.esc([p.address_line1, p.city, p.postcode].filter(Boolean).join(', ') || p.address || '—')}</td>
+            <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
+            <td>${ADMIN.fmtDate(p.created_at)}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  function renderTenants(tenants) {
+    if (!tenants.length) return `<div class="empty">No tenants.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Role</th><th>Tenancy</th></tr></thead>
+        <tbody>${tenants.map((t) => `
+          <tr>
+            <td>${ADMIN.esc(t.full_name || t.name || '—')}</td>
+            <td>${ADMIN.esc(t.email || '—')}</td>
+            <td>${ADMIN.statusPill(t.status)}</td>
+            <td>${ADMIN.esc(t.role || '—')}</td>
+            <td>${t.tenancy_start ? ADMIN.fmtDate(t.tenancy_start) : '—'}${t.tenancy_end ? ` – ${ADMIN.fmtDate(t.tenancy_end)}` : ''}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  function renderDocs(summary) {
+    const cats = Object.keys(summary);
+    if (!cats.length) return `<div class="empty">No documents.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>Category</th><th>Total</th><th>Expiring (60d)</th><th>Expired</th></tr></thead>
+        <tbody>${cats.sort().map((c) => `
+          <tr>
+            <td>${ADMIN.esc(c)}</td>
+            <td>${summary[c].count}</td>
+            <td>${summary[c].expiring60d > 0 ? `<span class="pill pill-orange">${summary[c].expiring60d}</span>` : '0'}</td>
+            <td>${summary[c].expired > 0 ? `<span class="pill pill-red">${summary[c].expired}</span>` : '0'}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  function renderAudits(audits) {
+    if (!audits.length) return `<div class="empty">No audit entries.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>When</th><th>Action</th><th>Resource</th><th>Metadata</th></tr></thead>
+        <tbody>${audits.map((e) => `
+          <tr>
+            <td>${ADMIN.relTime(e.created_at)}</td>
+            <td><code style="font-size:12px">${ADMIN.esc(e.action)}</code></td>
+            <td>${ADMIN.esc(e.resource_type)}</td>
+            <td>${e.metadata && Object.keys(e.metadata).length ? `<small>${ADMIN.esc(JSON.stringify(e.metadata))}</small>` : '—'}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  load();
+</script>
+
+</body>
+</html>

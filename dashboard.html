@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Dashboard — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Admin dashboard</h1>
+    <div class="sub" id="welcomeLine">—</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div id="statsGrid" class="stats-grid">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Search landlords</div>
+        <div class="card-sub">Match on name, email or company.</div>
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
+      <input type="search" id="searchInput" placeholder="Search…" />
+      <button class="btn btn-primary" id="searchBtn">Search</button>
+    </div>
+    <div id="landlordList" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Recent platform activity</div>
+        <div class="card-sub">Last 20 audit log entries across all users.</div>
+      </div>
+      <a class="btn btn-ghost" href="/audit.html">Open full log →</a>
+    </div>
+    <div id="recentActivity"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+  $("welcomeLine").textContent = `Signed in as ${admin.name} (${admin.role})`;
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function loadStats() {
+    try {
+      const data = await ADMIN.api("dashboard_stats");
+      const c = data.counts;
+      $("statsGrid").innerHTML = `
+        <div class="stat-tile">
+          <div class="label">Landlords</div>
+          <div class="value">${c.landlords}</div>
+          <div class="sub">All accounts</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">Properties (active)</div>
+          <div class="value">${c.properties}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">Tenants (active)</div>
+          <div class="value">${c.tenants}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">Subscriptions</div>
+          <div class="value">${c.active}</div>
+          <div class="sub">+ ${c.trialing} trialing · ${c.past_due} past due</div>
+        </div>
+        <div class="stat-tile ${c.trial_ends_this_week > 0 ? 'warn' : ''}">
+          <div class="label">Trials ending this week</div>
+          <div class="value">${c.trial_ends_this_week}</div>
+          <div class="sub">Next 7 days</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">Open maintenance</div>
+          <div class="value">${c.open_maintenance}</div>
+        </div>
+        <div class="stat-tile">
+          <div class="label">Upcoming visits</div>
+          <div class="value">${c.upcoming_visits}</div>
+        </div>
+      `;
+      $("recentActivity").innerHTML = renderAuditTable(data.recent_activity);
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load stats.");
+    }
+  }
+
+  function renderAuditTable(entries) {
+    if (!entries || !entries.length) return `<div class="empty">No recent activity.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Resource</th></tr></thead>
+        <tbody>${entries.map((e) => `
+          <tr>
+            <td>${ADMIN.relTime(e.created_at)}</td>
+            <td>${ADMIN.esc(e.actor_type)}${e.actor_id ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(String(e.actor_id).slice(0,8))}…</small>` : ""}</td>
+            <td><code style="font-size:12px">${ADMIN.esc(e.action)}</code></td>
+            <td>${ADMIN.esc(e.resource_type)}${e.resource_id ? ` · <small>${ADMIN.esc(String(e.resource_id).slice(0,8))}…</small>` : ""}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  async function loadLandlords(search = "") {
+    $("landlordList").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("list_landlords", { page: 1, per_page: 50, search });
+      if (!data.landlords.length) {
+        $("landlordList").innerHTML = `<div class="empty">No landlords match.</div>`;
+        return;
+      }
+      $("landlordList").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Email</th><th>Company</th>
+              <th>Properties</th><th>Tenants</th><th>Plan</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${data.landlords.map((l) => `
+            <tr>
+              <td>${ADMIN.esc(l.director_name || "—")}</td>
+              <td><a href="mailto:${ADMIN.esc(l.contact_email)}">${ADMIN.esc(l.contact_email)}</a></td>
+              <td>${ADMIN.esc(l.company_name || "—")}</td>
+              <td>${l.property_count_active}${l.property_count_archived ? ` <small style="color:var(--el-muted)">(+${l.property_count_archived} archived)</small>` : ""}</td>
+              <td>${l.tenant_count}</td>
+              <td>${ADMIN.esc(l.subscription?.plan ?? "—")}</td>
+              <td>${ADMIN.statusPill(l.subscription?.status ?? "—")}</td>
+              <td><a class="btn btn-secondary" href="/landlord.html?id=${ADMIN.esc(l.user_id)}">Open</a></td>
+            </tr>`).join("")}</tbody>
+        </table>
+        <div style="text-align:right;margin-top:8px;color:var(--el-muted);font-size:12px">${data.total} total</div>
+      `;
+    } catch (e) {
+      $("landlordList").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  }
+
+  $("searchBtn").addEventListener("click", () => loadLandlords($("searchInput").value.trim()));
+  $("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadLandlords($("searchInput").value.trim()); } });
+
+  loadStats();
+  loadLandlords();
+</script>
+
+</body>
+</html>

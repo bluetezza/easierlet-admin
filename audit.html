@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Audit log — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Audit log</h1>
+    <div class="sub">Append-only record of every significant action across the platform.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <form id="filterForm">
+      <div class="field-row" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+        <div class="field">
+          <label>Actor type</label>
+          <select id="fActorType">
+            <option value="">Any</option>
+            <option value="landlord">Landlord</option>
+            <option value="tenant">Tenant</option>
+            <option value="admin">Admin</option>
+            <option value="system">System</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Resource type</label>
+          <select id="fResourceType">
+            <option value="">Any</option>
+            <option>property</option><option>tenant</option><option>document</option>
+            <option>maintenance_request</option><option>tenancy_agreement</option>
+            <option>inventory_report</option><option>property_visit</option>
+            <option>viewing_request</option><option>property_listing</option>
+            <option>transaction</option><option>subscription</option>
+            <option>admin</option><option>retention</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Action (use % for wildcard)</label>
+          <input id="fAction" type="text" placeholder="e.g. tenant.% or document.uploaded">
+        </div>
+        <div class="field">
+          <label>Actor user_id</label>
+          <input id="fActorId" type="text" placeholder="UUID">
+        </div>
+        <div class="field">
+          <label>Resource id</label>
+          <input id="fResourceId" type="text" placeholder="UUID">
+        </div>
+        <div class="field">
+          <label>From</label>
+          <input id="fFrom" type="date">
+        </div>
+        <div class="field">
+          <label>To</label>
+          <input id="fTo" type="date">
+        </div>
+      </div>
+      <div class="row-actions" style="justify-content:flex-start;gap:10px">
+        <button class="btn btn-primary" type="submit">Apply filters</button>
+        <button class="btn btn-secondary" type="button" id="resetBtn">Reset</button>
+        <button class="btn btn-ghost" type="button" id="csvBtn">Export CSV</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div id="auditList"><div class="spinner"></div></div>
+    <div id="pager" style="text-align:center;margin-top:14px"></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("audit", admin);
+
+  let page = 1;
+  const PER = 100;
+  let lastResults = [];
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  function buildFilters() {
+    const f = {};
+    if ($("fActorType").value) f.actor_type = $("fActorType").value;
+    if ($("fResourceType").value) f.resource_type = $("fResourceType").value;
+    if ($("fAction").value.trim()) f.action = $("fAction").value.trim();
+    if ($("fActorId").value.trim()) f.actor_id = $("fActorId").value.trim();
+    if ($("fResourceId").value.trim()) f.resource_id = $("fResourceId").value.trim();
+    if ($("fFrom").value) f.from = $("fFrom").value + "T00:00:00Z";
+    if ($("fTo").value)   f.to   = $("fTo").value   + "T23:59:59Z";
+    return f;
+  }
+
+  async function load() {
+    $("auditList").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("view_audit_log", { filters: buildFilters(), page, per_page: PER });
+      lastResults = data.entries;
+      $("auditList").innerHTML = renderTable(data.entries);
+      const totalPages = Math.max(1, Math.ceil(data.total / PER));
+      $("pager").innerHTML = `
+        <button class="btn btn-secondary" id="pagePrev" ${page <= 1 ? "disabled" : ""}>← Prev</button>
+        <span style="margin:0 14px;color:var(--el-muted);font-size:13px">Page ${page} of ${totalPages} · ${data.total} total</span>
+        <button class="btn btn-secondary" id="pageNext" ${page >= totalPages ? "disabled" : ""}>Next →</button>
+      `;
+      $("pagePrev")?.addEventListener("click", () => { if (page > 1) { page--; load(); } });
+      $("pageNext")?.addEventListener("click", () => { page++; load(); });
+
+      // Wire row expand / collapse
+      document.querySelectorAll("[data-row-toggle]").forEach((btn) => btn.addEventListener("click", () => {
+        const id = btn.dataset.rowToggle;
+        const row = document.querySelector(`tr[data-meta-row="${id}"]`);
+        if (row) row.classList.toggle("hidden");
+      }));
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load audit log.");
+    }
+  }
+
+  function renderTable(entries) {
+    if (!entries.length) return `<div class="empty">No entries match.</div>`;
+    return `
+      <table class="table">
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Resource</th><th>IP</th><th></th></tr></thead>
+        <tbody>${entries.map((e) => `
+          <tr>
+            <td>${ADMIN.fmtDateTime(e.created_at)}</td>
+            <td>${ADMIN.esc(e.actor_type)}${e.actor_id ? `<br><small style="color:var(--el-muted);font-family:Menlo,monospace">${ADMIN.esc(e.actor_id)}</small>` : ""}</td>
+            <td><code style="font-size:12px">${ADMIN.esc(e.action)}</code></td>
+            <td>${ADMIN.esc(e.resource_type)}${e.resource_id ? `<br><small style="color:var(--el-muted);font-family:Menlo,monospace">${ADMIN.esc(e.resource_id)}</small>` : ""}</td>
+            <td><small>${ADMIN.esc(e.ip_address || "—")}</small></td>
+            <td><button class="btn btn-ghost" data-row-toggle="${ADMIN.esc(e.id)}">Detail</button></td>
+          </tr>
+          <tr data-meta-row="${ADMIN.esc(e.id)}" class="hidden"><td colspan="6"><pre class="metadata-pre">${ADMIN.esc(JSON.stringify(e.metadata || {}, null, 2))}\nUA: ${ADMIN.esc(e.user_agent || "")}</pre></td></tr>
+        `).join("")}</tbody>
+      </table>
+      <style>tr.hidden{display:none}</style>
+    `;
+  }
+
+  function exportCsv() {
+    if (!lastResults.length) { alertBox("warn", "Apply a filter first to export."); return; }
+    const header = ["created_at","actor_type","actor_id","action","resource_type","resource_id","ip_address","user_agent","metadata"];
+    const csv = [header.join(",")].concat(lastResults.map((r) => header.map((h) => {
+      let v = h === "metadata" ? JSON.stringify(r.metadata || {}) : (r[h] ?? "");
+      return `"${String(v).replace(/"/g, '""')}"`;
+    }).join(","))).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `audit-export-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  $("filterForm").addEventListener("submit", (e) => { e.preventDefault(); page = 1; load(); });
+  $("resetBtn").addEventListener("click", () => { document.getElementById("filterForm").reset(); page = 1; load(); });
+  $("csvBtn").addEventListener("click", exportCsv);
+
+  load();
+</script>
+
+</body>
+</html>

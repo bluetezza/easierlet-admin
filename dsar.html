@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>DSAR — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Data Subject Access Request (DSAR)</h1>
+    <div class="sub">Generate a downloadable PDF of all personal data we hold for a user. Logged to audit. Delivered as a 24-hour signed URL.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">1. Find the user</div>
+        <div class="card-sub">Search by email. Match against landlord_profiles or tenants.</div>
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
+      <input type="search" id="searchInput" placeholder="email@example.com">
+      <button class="btn btn-primary" id="searchBtn">Search</button>
+    </div>
+    <div id="searchResults" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card" id="generateCard" style="display:none">
+    <div class="card-head">
+      <div>
+        <div class="card-title">2. Generate export</div>
+        <div class="card-sub">A branded PDF containing the user's personal data, retention info, and audit-log entries.</div>
+      </div>
+    </div>
+    <div id="userSummary"></div>
+    <div class="row-actions" style="margin-top:14px;justify-content:flex-start">
+      <button class="btn btn-primary" id="genBtn">Generate PDF</button>
+    </div>
+    <div id="genResult" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">UK GDPR procedure reminder</div>
+      </div>
+    </div>
+    <ul style="font-size:14px;color:var(--el-ink-soft);line-height:1.7;padding-left:20px">
+      <li><strong>Verify identity first.</strong> Don't generate a DSAR for an email you can't tie to the requester.</li>
+      <li><strong>30-day response window.</strong> Usually deliver within a few days; one-off extensions only when justified.</li>
+      <li><strong>Review for third-party data.</strong> Check the export doesn't expose other users' personal data (e.g. landlord notes about a referee).</li>
+      <li><strong>Deliver securely.</strong> The 24-hour signed URL is sent via Resend or shared with the requester directly. Don't email the PDF as an attachment to anyone other than the data subject.</li>
+    </ul>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dsar", admin);
+
+  let chosen = null;
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function search() {
+    const term = $("searchInput").value.trim().toLowerCase();
+    if (!term) return;
+    $("searchResults").innerHTML = `<div class="spinner"></div>`;
+    try {
+      // Use list_landlords + a tenant lookup — both paginated.
+      const ll = await ADMIN.api("list_landlords", { search: term, per_page: 25 });
+      const tt = await ADMIN.api("view_audit_log", { filters: { resource_type: "tenant" }, per_page: 1 }).catch(() => ({ entries: [] }));
+      const matches = (ll.landlords || []).map((l) => ({
+        type: "landlord",
+        id: l.user_id,
+        name: l.director_name,
+        email: l.contact_email,
+        company: l.company_name,
+        sub_status: l.subscription?.status,
+      }));
+      // Tenant lookup: hit the supabase REST directly via admin-api won't list arbitrary tenants
+      // by email. Use view_landlord embedded tenants — but that requires the landlord first.
+      // For now, just show landlord matches; tenants are reachable via the landlord page.
+      if (!matches.length) {
+        $("searchResults").innerHTML = `<div class="empty">No landlord matches. To DSAR a tenant, open their landlord first and use Generate DSAR from there.</div>`;
+        return;
+      }
+      $("searchResults").innerHTML = `
+        <table class="table">
+          <thead><tr><th></th><th>Name</th><th>Email</th><th>Company</th><th>Status</th><th></th></tr></thead>
+          <tbody>${matches.map((m) => `
+            <tr>
+              <td>${ADMIN.statusPill(m.type)}</td>
+              <td>${ADMIN.esc(m.name || "—")}</td>
+              <td>${ADMIN.esc(m.email || "—")}</td>
+              <td>${ADMIN.esc(m.company || "—")}</td>
+              <td>${ADMIN.statusPill(m.sub_status || "—")}</td>
+              <td><button class="btn btn-secondary" data-pick='${ADMIN.esc(JSON.stringify(m))}'>Pick</button></td>
+            </tr>`).join("")}</tbody>
+        </table>
+      `;
+      document.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => {
+        const m = JSON.parse(b.dataset.pick);
+        chosen = m;
+        $("generateCard").style.display = "";
+        $("userSummary").innerHTML = `
+          <table class="table">
+            <tbody>
+              <tr><td><strong>Type</strong></td><td>${ADMIN.statusPill(m.type)}</td></tr>
+              <tr><td><strong>Name</strong></td><td>${ADMIN.esc(m.name || "—")}</td></tr>
+              <tr><td><strong>Email</strong></td><td>${ADMIN.esc(m.email || "—")}</td></tr>
+              <tr><td><strong>User ID</strong></td><td><code>${ADMIN.esc(m.id)}</code></td></tr>
+            </tbody>
+          </table>
+        `;
+        $("genResult").innerHTML = "";
+      }));
+    } catch (e) {
+      $("searchResults").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  }
+
+  async function generate() {
+    if (!chosen) return;
+    const btn = $("genBtn");
+    btn.disabled = true; btn.textContent = "Generating PDF…";
+    $("genResult").innerHTML = "";
+    try {
+      const data = await ADMIN.api("generate_dsar", { user_id: chosen.id, user_type: chosen.type });
+      if (data.download_url) {
+        $("genResult").innerHTML = `
+          <div class="alert success">PDF ready. The link is valid for 24 hours.</div>
+          <a class="btn btn-primary" href="${ADMIN.esc(data.download_url)}" target="_blank" rel="noopener">Download DSAR PDF</a>
+        `;
+      } else {
+        $("genResult").innerHTML = `<div class="alert warn">${ADMIN.esc(data.message || "DSAR returned without a download link.")}</div>`;
+      }
+    } catch (e) {
+      $("genResult").innerHTML = `<div class="alert error">${ADMIN.esc(e.message || "DSAR generation failed.")}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = "Generate PDF";
+    }
+  }
+
+  $("searchBtn").addEventListener("click", search);
+  $("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); search(); } });
+  $("genBtn").addEventListener("click", generate);
+</script>
+
+</body>
+</html>
