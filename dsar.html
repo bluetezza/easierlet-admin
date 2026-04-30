@@ -143,13 +143,18 @@
     $("genResult").innerHTML = "";
     try {
       const data = await ADMIN.api("generate_dsar", { user_id: chosen.id, user_type: chosen.type });
-      if (data.download_url) {
+      if (data.html) {
+        // Build a blob URL so the browser renders the HTML inline. Open in a
+        // new tab — admin can then File → Print → Save as PDF for the recipient.
+        const blob = new Blob([data.html], { type: "text/html;charset=utf-8" });
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank", "noopener");
         $("genResult").innerHTML = `
-          <div class="alert success">PDF ready. The link is valid for 24 hours.</div>
-          <a class="btn btn-primary" href="${ADMIN.esc(data.download_url)}" target="_blank" rel="noopener">Download DSAR PDF</a>
+          <div class="alert success">DSAR opened in a new tab. Use <strong>File → Print → Save as PDF</strong> to send to the data subject.</div>
+          <a class="btn btn-primary" href="${blobUrl}" target="_blank" rel="noopener" download="${ADMIN.esc(data.filename || "dsar.html")}">Open DSAR again</a>
         `;
       } else {
-        $("genResult").innerHTML = `<div class="alert warn">${ADMIN.esc(data.message || "DSAR returned without a download link.")}</div>`;
+        $("genResult").innerHTML = `<div class="alert warn">${ADMIN.esc(data.message || "DSAR returned without content.")}</div>`;
       }
     } catch (e) {
       $("genResult").innerHTML = `<div class="alert error">${ADMIN.esc(e.message || "DSAR generation failed.")}</div>`;
