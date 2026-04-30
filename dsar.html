@@ -83,33 +83,43 @@
     if (!term) return;
     $("searchResults").innerHTML = `<div class="spinner"></div>`;
     try {
-      // Use list_landlords + a tenant lookup — both paginated.
-      const ll = await ADMIN.api("list_landlords", { search: term, per_page: 25 });
-      const tt = await ADMIN.api("view_audit_log", { filters: { resource_type: "tenant" }, per_page: 1 }).catch(() => ({ entries: [] }));
-      const matches = (ll.landlords || []).map((l) => ({
+      // Search both landlords and tenants in parallel.
+      const [ll, tt] = await Promise.all([
+        ADMIN.api("list_landlords", { search: term, per_page: 25 }).catch(() => ({ landlords: [] })),
+        ADMIN.api("search_tenants",  { search: term })             .catch(() => ({ tenants:    [] })),
+      ]);
+      const landlordMatches = (ll.landlords || []).map((l) => ({
         type: "landlord",
         id: l.user_id,
         name: l.director_name,
         email: l.contact_email,
-        company: l.company_name,
-        sub_status: l.subscription?.status,
+        context: l.company_name || "—",
+        sub_status: l.subscription?.status || "—",
       }));
-      // Tenant lookup: hit the supabase REST directly via admin-api won't list arbitrary tenants
-      // by email. Use view_landlord embedded tenants — but that requires the landlord first.
-      // For now, just show landlord matches; tenants are reachable via the landlord page.
+      const tenantMatches = (tt.tenants || []).map((t) => ({
+        type: "tenant",
+        id: t.id,
+        name: t.name,
+        email: t.email,
+        context: t.property?.address
+          ? `${t.property.address}${t.landlord?.director_name ? ` · ${t.landlord.director_name}` : ""}`
+          : (t.landlord?.director_name || "—"),
+        sub_status: t.status || "—",
+      }));
+      const matches = [...landlordMatches, ...tenantMatches];
       if (!matches.length) {
-        $("searchResults").innerHTML = `<div class="empty">No landlord matches. To DSAR a tenant, open their landlord first and use Generate DSAR from there.</div>`;
+        $("searchResults").innerHTML = `<div class="empty">No matches for "${ADMIN.esc(term)}". Search by email, name, or company.</div>`;
         return;
       }
       $("searchResults").innerHTML = `
         <table class="table">
-          <thead><tr><th></th><th>Name</th><th>Email</th><th>Company</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Email</th><th>Context</th><th>Status</th><th></th></tr></thead>
           <tbody>${matches.map((m) => `
             <tr>
               <td>${ADMIN.statusPill(m.type)}</td>
               <td>${ADMIN.esc(m.name || "—")}</td>
               <td>${ADMIN.esc(m.email || "—")}</td>
-              <td>${ADMIN.esc(m.company || "—")}</td>
+              <td>${ADMIN.esc(m.context || "—")}</td>
               <td>${ADMIN.statusPill(m.sub_status || "—")}</td>
               <td><button class="btn btn-secondary" data-pick='${ADMIN.esc(JSON.stringify(m))}'>Pick</button></td>
             </tr>`).join("")}</tbody>
