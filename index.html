@@ -134,7 +134,15 @@
     }
     if (result.mfa_required) {
       stashedFactorId = result.factor_id;
-      stashedChallengeId = result.challenge_id;
+      // Issue the MFA challenge from the browser so challenge IP and verify
+      // IP match (Supabase rejects mismatched IPs with 422 mfa_ip_address_mismatch).
+      const ch = await ADMIN.supabase.auth.mfa.challenge({ factorId: stashedFactorId });
+      if (ch.error || !ch.data) {
+        showAlert("error", ch.error?.message || "Couldn't start MFA challenge.");
+        btn.disabled = false; btn.textContent = "Continue";
+        return;
+      }
+      stashedChallengeId = ch.data.id;
       showStep("mfa");
       $("mfaCode").focus();
       btn.disabled = false; btn.textContent = "Continue";
@@ -152,18 +160,23 @@
     const btn = $("mfaBtn");
     btn.disabled = true; btn.textContent = "Verifying…";
 
-    const result = await callAuth("verify_mfa", {
-      session: stashedSession, factor_id: stashedFactorId, challenge_id: stashedChallengeId, code,
+    // Verify directly with Supabase from the browser. supabase-js will
+    // auto-install the upgraded AAL2 session on success.
+    const verify = await ADMIN.supabase.auth.mfa.verify({
+      factorId: stashedFactorId, challengeId: stashedChallengeId, code,
     });
-    if (!result.ok) {
-      showAlert("error", result.message || "Invalid code.");
+    if (verify.error) {
+      showAlert("error", verify.error.message || "Invalid code.");
       btn.disabled = false; btn.textContent = "Verify";
       return;
     }
-    if (result.session) {
-      // Upgraded session (aal2) — install it client-side.
-      await ADMIN.supabase.auth.setSession(result.session);
+
+    // Confirm the session was upgraded, then notify the EF for audit + last_login_at.
+    const { data: sess } = await ADMIN.supabase.auth.getSession();
+    if (sess?.session?.access_token) {
+      await callAuth("log_login", { access_token: sess.session.access_token }).catch(() => {});
     }
+
     window.location.replace("/dashboard.html");
   });
 
