@@ -171,10 +171,10 @@
       return;
     }
 
-    // Confirm the session was upgraded, then notify the EF for audit + last_login_at.
-    const { data: sess } = await ADMIN.supabase.auth.getSession();
-    if (sess?.session?.access_token) {
-      await callAuth("log_login", { access_token: sess.session.access_token }).catch(() => {});
+    // Use the access_token returned by mfa.verify directly — that's the new
+    // AAL2 token, no race condition with localStorage updates.
+    if (verify.data?.access_token) {
+      await callAuth("log_login", { access_token: verify.data.access_token }).catch(() => {});
     }
 
     window.location.replace("/dashboard.html");
