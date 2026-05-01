@@ -36,7 +36,7 @@
     <div id="lProfile"><div class="spinner"></div></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardSubscription">
     <div class="card-head">
       <div>
         <div class="card-title">Subscription</div>
@@ -46,7 +46,7 @@
     <div id="lSub2"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardProperties">
     <div class="card-head">
       <div>
         <div class="card-title">Properties</div>
@@ -55,7 +55,17 @@
     <div id="lProps"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardListings">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Listings</div>
+        <div class="card-sub">Marketing listings on easierlet.com. Drafts, live ads, let-agreed.</div>
+      </div>
+    </div>
+    <div id="lListings"></div>
+  </div>
+
+  <div class="card" id="cardTenants">
     <div class="card-head">
       <div>
         <div class="card-title">Tenants</div>
@@ -65,7 +75,7 @@
     <div id="lTenants"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="cardDocuments">
     <div class="card-head">
       <div>
         <div class="card-title">Documents</div>
@@ -118,12 +128,25 @@
       const propsById = Object.fromEntries((data.properties || []).map((p) => [p.id, p]));
       const audits = data.recent_audit || [];
 
+      const listings = data.listings || [];
+      const liveListings = listings.filter((l) => l.status === "live").length;
       $("lStats").innerHTML = `
-        <div class="stat-tile"><div class="label">Properties</div><div class="value">${props.filter(p=>!p.archived).length}</div><div class="sub">${props.filter(p=>p.archived).length} archived</div></div>
-        <div class="stat-tile"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
-        <div class="stat-tile"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
-        <div class="stat-tile"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(sub?.plan || '—')}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
+        <div class="stat-tile" data-scroll="cardProperties" role="button" tabindex="0"><div class="label">Properties</div><div class="value">${props.filter(p=>!p.archived).length}</div><div class="sub">${props.filter(p=>p.archived).length} archived</div></div>
+        <div class="stat-tile" data-scroll="cardListings"  role="button" tabindex="0"><div class="label">Listings</div><div class="value">${listings.length}</div><div class="sub">${liveListings} live</div></div>
+        <div class="stat-tile" data-scroll="cardTenants"   role="button" tabindex="0"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
+        <div class="stat-tile" data-scroll="cardDocuments" role="button" tabindex="0"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
+        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(sub?.plan || '—')}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
       `;
+      // Stat tiles scroll to relevant section.
+      document.querySelectorAll("[data-scroll]").forEach((tile) => {
+        const target = tile.dataset.scroll;
+        const go = () => {
+          const el = document.getElementById(target);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        };
+        tile.addEventListener("click", go);
+        tile.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      });
 
       $("lProfile").innerHTML = `
         <table class="table">
@@ -141,7 +164,8 @@
       `;
 
       $("lSub2").innerHTML = renderSubscription(sub);
-      $("lProps").innerHTML = renderProperties(props);
+      $("lProps").innerHTML = renderProperties(props, listings);
+      $("lListings").innerHTML = renderListings(listings, propsById);
       $("lTenants").innerHTML = renderTenants(tenants);
       $("lDocs").innerHTML = renderDocs(docs, docList, propsById);
       // Wire up doc view buttons
@@ -213,17 +237,63 @@
     `;
   }
 
-  function renderProperties(props) {
+  function renderProperties(props, listings) {
     if (!props.length) return `<div class="empty">No properties.</div>`;
+    const listingsByProp = {};
+    for (const l of listings || []) {
+      (listingsByProp[l.property_id] ||= []).push(l);
+    }
+    const fmtMoney = (n) => n != null ? `£${Math.round(Number(n)).toLocaleString("en-GB")}` : "—";
     return `
       <table class="table">
-        <thead><tr><th>Address</th><th>Status</th><th>Created</th></tr></thead>
-        <tbody>${props.map((p) => `
+        <thead><tr><th>Address</th><th>Beds / Baths</th><th>Rent</th><th>Deposit</th><th>Status</th><th>Listing</th><th>Created</th></tr></thead>
+        <tbody>${props.map((p) => {
+          const addr = [p.address_line1, p.address_line2, p.city, p.postcode].filter(Boolean).join(', ') || p.address || '—';
+          const ll = (listingsByProp[p.id] || []).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
+          const listingPill = ll
+            ? ADMIN.statusPill(ll.status)
+            : '<span class="pill pill-grey">None</span>';
+          return `
           <tr>
-            <td>${ADMIN.esc([p.address_line1, p.city, p.postcode].filter(Boolean).join(', ') || p.address || '—')}</td>
+            <td>${ADMIN.esc(addr)}</td>
+            <td>${p.bedrooms ?? '—'} / ${p.bathrooms ?? '—'}</td>
+            <td>${fmtMoney(p.monthly_rent)}</td>
+            <td>${fmtMoney(p.deposit)}</td>
             <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
+            <td>${listingPill}</td>
             <td>${ADMIN.fmtDate(p.created_at)}</td>
-          </tr>`).join("")}</tbody>
+          </tr>`;
+        }).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  function renderListings(listings, propsById) {
+    if (!listings?.length) return `<div class="empty">No listings.</div>`;
+    const fmtMoney = (n) => n != null ? `£${Math.round(Number(n)).toLocaleString("en-GB")}` : "—";
+    return `
+      <table class="table">
+        <thead><tr><th>Headline</th><th>Property</th><th>Status</th><th>Rent</th><th>Available</th><th>Views / Leads / Viewings</th><th>Published</th><th></th></tr></thead>
+        <tbody>${listings.map((l) => {
+          const prop = l.property_id ? propsById[l.property_id] : null;
+          const propLabel = prop
+            ? ([prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(', ') || prop.address || '—')
+            : '—';
+          const publicLink = l.slug && l.status === "live"
+            ? `<a class="btn btn-secondary" href="https://easierlet.com/listings/?slug=${encodeURIComponent(l.slug)}" target="_blank" rel="noopener">View ad</a>`
+            : '';
+          return `
+          <tr>
+            <td>${ADMIN.esc(l.headline || '—')}</td>
+            <td>${ADMIN.esc(propLabel)}</td>
+            <td>${ADMIN.statusPill(l.status)}</td>
+            <td>${fmtMoney(l.advertised_rent)}</td>
+            <td>${l.available_from ? ADMIN.fmtDate(l.available_from) : '—'}</td>
+            <td>${l.view_count ?? 0} / ${l.lead_count ?? 0} / ${l.viewing_count ?? 0}</td>
+            <td>${l.published_at ? ADMIN.fmtDate(l.published_at) : '—'}</td>
+            <td>${publicLink}</td>
+          </tr>`;
+        }).join("")}</tbody>
       </table>
     `;
   }

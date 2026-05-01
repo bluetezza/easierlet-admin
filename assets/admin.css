@@ -97,7 +97,18 @@ body {
 .stat-tile {
   background: #fff; border: 1px solid var(--el-line-soft);
   border-radius: 12px; padding: 16px;
+  transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
+.stat-tile[role="button"] { cursor: pointer; user-select: none; }
+.stat-tile[role="button"]:hover {
+  border-color: var(--el-green, #1A6B55);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.stat-tile[role="button"]:focus-visible {
+  outline: 2px solid var(--el-green, #1A6B55); outline-offset: 2px;
+}
+.card[id^="card"] { scroll-margin-top: 88px; }
 .stat-tile .label {
   font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
   text-transform: uppercase; color: var(--el-muted); margin-bottom: 6px;
