@@ -34,12 +34,29 @@
         <div class="card-title">Search landlords</div>
         <div class="card-sub">Match on name, email or company.</div>
       </div>
+      <button class="btn btn-secondary" id="inviteOpenBtn">+ Invite landlord</button>
     </div>
     <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
       <input type="search" id="searchInput" placeholder="Search…" />
       <button class="btn btn-primary" id="searchBtn">Search</button>
     </div>
     <div id="landlordList" style="margin-top:14px"></div>
+  </div>
+
+  <!-- Invite landlord modal -->
+  <div id="inviteBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto">
+    <div style="background:white;border-radius:14px;width:100%;max-width:480px;padding:24px">
+      <h2 style="font-family:'Fraunces',serif;font-weight:400;font-size:22px;margin:0 0 4px">Invite a landlord</h2>
+      <p class="card-sub" style="margin-bottom:16px">Creates the account and sends a branded "set your password" email. The new landlord lands on a 14-day trial.</p>
+      <div class="field"><label>Their name</label><input type="text" id="invName" placeholder="e.g. Jane Smith"></div>
+      <div class="field"><label>Email</label><input type="email" id="invEmail" placeholder="jane@example.com"></div>
+      <div class="field"><label>Company (optional)</label><input type="text" id="invCompany" placeholder="e.g. Smith Lettings Ltd"></div>
+      <div id="invAlert" class="alert" style="display:none"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px">
+        <button class="btn btn-secondary" id="invCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="invSendBtn">Send invite</button>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -162,6 +179,35 @@
 
   $("searchBtn").addEventListener("click", () => loadLandlords($("searchInput").value.trim()));
   $("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadLandlords($("searchInput").value.trim()); } });
+
+  // Invite landlord modal wiring
+  const invBg = document.getElementById("inviteBg");
+  document.getElementById("inviteOpenBtn").addEventListener("click", () => {
+    document.getElementById("invName").value = "";
+    document.getElementById("invEmail").value = "";
+    document.getElementById("invCompany").value = "";
+    const a = document.getElementById("invAlert"); a.style.display = "none"; a.className = "alert";
+    invBg.style.display = "flex";
+  });
+  document.getElementById("invCancelBtn").addEventListener("click", () => { invBg.style.display = "none"; });
+  invBg.addEventListener("click", (e) => { if (e.target === invBg) invBg.style.display = "none"; });
+  document.getElementById("invSendBtn").addEventListener("click", async () => {
+    const name = document.getElementById("invName").value.trim();
+    const email = document.getElementById("invEmail").value.trim();
+    const company = document.getElementById("invCompany").value.trim();
+    const a = document.getElementById("invAlert");
+    if (!name || !email) { a.className = "alert error"; a.textContent = "Name and email are required."; a.style.display = "block"; return; }
+    const btn = document.getElementById("invSendBtn"); btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      const r = await ADMIN.api("invite_landlord", { name, email, company_name: company });
+      a.className = "alert success"; a.textContent = `Invite sent to ${email}.`; a.style.display = "block";
+      setTimeout(() => { invBg.style.display = "none"; loadLandlords(""); }, 1200);
+    } catch (e) {
+      a.className = "alert error"; a.textContent = e?.message || "Couldn't send invite."; a.style.display = "block";
+    } finally {
+      btn.disabled = false; btn.textContent = "Send invite";
+    }
+  });
 
   loadStats();
   loadLandlords();
