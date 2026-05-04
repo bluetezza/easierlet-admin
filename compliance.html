@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Compliance rules — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+
+  <style>
+    .seg { display: inline-flex; background: #E5EAE7; padding: 4px; border-radius: 999px; gap: 4px; margin-bottom: 16px; }
+    .seg button { background: transparent; border: none; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--el-muted); font-family: inherit; }
+    .seg button.active { background: white; color: var(--el-green, #1A6B55); font-weight: 600; }
+    .rule-row { padding: 14px 0; border-bottom: 1px solid var(--el-line); display: flex; align-items: center; gap: 14px; }
+    .rule-row:last-child { border-bottom: none; }
+    .rule-name { flex: 1; }
+    .rule-name .name { font-weight: 600; font-size: 14px; }
+    .rule-name .meta { font-size: 12px; color: var(--el-muted); margin-top: 2px; }
+    .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start; justify-content: center; padding: 60px 20px; overflow-y: auto; }
+    .modal-bg.show { display: flex; }
+    .modal { background: white; border-radius: 14px; width: 100%; max-width: 600px; padding: 24px; max-height: 80vh; overflow-y: auto; }
+    .modal h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 22px; margin: 0 0 16px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 22px; }
+  </style>
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Compliance rule library</h1>
+    <div class="sub">The master list of UK landlord compliance requirements. Edits propagate to every property in the matching jurisdiction. Adding a new rule backfills <code>property_compliance</code> rows for matching properties as <em>pending</em>.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="seg" role="tablist">
+          <button data-j="all"      class="active">All</button>
+          <button data-j="england">England</button>
+          <button data-j="scotland">Scotland</button>
+          <button data-j="wales">Wales</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="newBtn">+ New rule</button>
+    </div>
+    <div id="rules"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">How edits propagate</div>
+      </div>
+    </div>
+    <ul style="font-size:13px;color:var(--el-ink-soft);line-height:1.7;padding-left:20px">
+      <li><strong>Add a rule</strong> — every property in the matching jurisdiction immediately gets a <em>pending</em> row.</li>
+      <li><strong>Update a rule</strong> — affects how the rule is presented; existing per-property records (last completed / next due / certificates) are untouched.</li>
+      <li><strong>Delete a rule</strong> — only allowed if no property has a certificate filed under it. To "retire" a rule with history, leave it in place and remove it from <code>applies_to</code> via the editor (handled automatically by the trigger).</li>
+      <li><strong>Frequency change</strong> — the next time a landlord marks a requirement complete, the new frequency is used to compute the next due date.</li>
+    </ul>
+  </div>
+</main>
+
+<!-- Edit modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <h2 id="mTitle">New rule</h2>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Jurisdiction</label>
+        <select id="fJurisdiction">
+          <option value="england">England</option>
+          <option value="scotland">Scotland</option>
+          <option value="wales">Wales</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Code (snake_case, unique per jurisdiction)</label>
+        <input type="text" id="fCode" placeholder="e.g. epc">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Display name</label>
+      <input type="text" id="fName" placeholder="e.g. Energy Performance Certificate">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>Frequency type</label>
+        <select id="fFreqType">
+          <option value="annual">Annual</option>
+          <option value="years">Every N years</option>
+          <option value="monthly">Every N months</option>
+          <option value="once">One-off</option>
+          <option value="event">At each tenancy</option>
+          <option value="ongoing">Ongoing</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Frequency value (years/months only)</label>
+        <input type="number" id="fFreqValue" min="1" placeholder="e.g. 5">
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>Applies to</label>
+        <select id="fAppliesTo">
+          <option value="all">All</option>
+          <option value="single_let_only">Single-let only</option>
+          <option value="gas_only">Properties with gas only</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Tenant copy required?</label>
+        <select id="fTenantCopy">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Tenant copy deadline (days)</label>
+      <input type="number" id="fTenantDeadline" min="1" placeholder="e.g. 28">
+    </div>
+
+    <div class="field">
+      <label>Legal basis (optional)</label>
+      <input type="text" id="fLegal" placeholder="e.g. Electrical Safety Standards Regulations 2020">
+    </div>
+
+    <div class="field">
+      <label>Notes (shown to landlord)</label>
+      <textarea id="fNotes" rows="3"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" id="deleteBtn" style="background:#FBE6E6;color:#8A2A2A;display:none">Delete</button>
+        <button class="btn btn-primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+    <div id="mAlert" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<script type="module">
+import "/assets/admin.js";
+const ADMIN = window.ADMIN;
+const $ = (id) => document.getElementById(id);
+
+const admin = await ADMIN.requireAdminSession();
+if (!admin) throw new Error("redirecting");
+ADMIN.mountHeader("compliance", admin);
+
+let rules = [];
+let activeJ = "all";
+let editing = null;
+
+function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; setTimeout(() => { a.className = "alert"; a.textContent = ""; }, 5000); }
+function modalAlert(kind, msg) { const a = $("mAlert"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+async function load() {
+  try {
+    const data = await ADMIN.api("list_compliance_rules", {});
+    rules = data.rules || [];
+    render();
+  } catch (e) {
+    $("rules").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+  }
+}
+
+function render() {
+  document.querySelectorAll(".seg button").forEach(b => b.classList.toggle("active", b.dataset.j === activeJ));
+  const filtered = activeJ === "all" ? rules : rules.filter(r => r.jurisdiction === activeJ);
+  if (!filtered.length) {
+    $("rules").innerHTML = `<div class="empty">No rules for ${activeJ}.</div>`;
+    return;
+  }
+  // Group by jurisdiction
+  const groups = {};
+  for (const r of filtered) (groups[r.jurisdiction] ||= []).push(r);
+  const html = Object.keys(groups).sort().map(j => `
+    <div style="margin:18px 0 6px"><strong style="font-size:13px;color:var(--el-muted);text-transform:uppercase;letter-spacing:0.5px">${ADMIN.esc(j)}</strong></div>
+    <div>
+      ${groups[j].map(r => `
+        <div class="rule-row">
+          <div class="rule-name">
+            <div class="name">${ADMIN.esc(r.name)}</div>
+            <div class="meta">
+              <code>${ADMIN.esc(r.code)}</code>
+              · ${ADMIN.esc(formatFreq(r))}
+              · applies to <strong>${ADMIN.esc(r.applies_to)}</strong>
+              ${r.tenant_copy_required ? `· tenant copy in ${r.tenant_copy_deadline_days || 28}d` : ""}
+            </div>
+          </div>
+          <button class="btn btn-secondary" data-edit="${ADMIN.esc(r.id)}">Edit</button>
+        </div>
+      `).join("")}
+    </div>
+  `).join("");
+  $("rules").innerHTML = html;
+  document.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openEdit(b.dataset.edit)));
+}
+
+function formatFreq(r) {
+  switch (r.frequency_type) {
+    case "annual":  return "Annual";
+    case "years":   return `Every ${r.frequency_value || 1} years`;
+    case "monthly": return `Every ${r.frequency_value || 1} months`;
+    case "once":    return "One-off";
+    case "event":   return "At each tenancy";
+    case "ongoing": return "Ongoing";
+  }
+  return r.frequency_type;
+}
+
+function openNew() {
+  editing = null;
+  $("mTitle").textContent = "New rule";
+  $("fJurisdiction").value = activeJ === "all" ? "england" : activeJ;
+  $("fCode").value = "";
+  $("fName").value = "";
+  $("fFreqType").value = "years";
+  $("fFreqValue").value = "";
+  $("fAppliesTo").value = "all";
+  $("fTenantCopy").value = "false";
+  $("fTenantDeadline").value = "";
+  $("fLegal").value = "";
+  $("fNotes").value = "";
+  $("deleteBtn").style.display = "none";
+  $("mAlert").className = "alert"; $("mAlert").textContent = "";
+  $("modalBg").classList.add("show");
+}
+
+function openEdit(id) {
+  const r = rules.find(x => x.id === id);
+  if (!r) return;
+  editing = r;
+  $("mTitle").textContent = `Edit — ${r.name}`;
+  $("fJurisdiction").value = r.jurisdiction;
+  $("fCode").value = r.code;
+  $("fName").value = r.name;
+  $("fFreqType").value = r.frequency_type;
+  $("fFreqValue").value = r.frequency_value || "";
+  $("fAppliesTo").value = r.applies_to;
+  $("fTenantCopy").value = r.tenant_copy_required ? "true" : "false";
+  $("fTenantDeadline").value = r.tenant_copy_deadline_days || "";
+  $("fLegal").value = r.legal_basis || "";
+  $("fNotes").value = r.notes || "";
+  $("deleteBtn").style.display = "";
+  $("mAlert").className = "alert"; $("mAlert").textContent = "";
+  $("modalBg").classList.add("show");
+}
+
+async function save() {
+  const rule = {
+    id: editing?.id,
+    jurisdiction: $("fJurisdiction").value,
+    code: $("fCode").value.trim(),
+    name: $("fName").value.trim(),
+    frequency_type: $("fFreqType").value,
+    frequency_value: $("fFreqValue").value ? Number($("fFreqValue").value) : null,
+    applies_to: $("fAppliesTo").value,
+    tenant_copy_required: $("fTenantCopy").value === "true",
+    tenant_copy_deadline_days: $("fTenantDeadline").value ? Number($("fTenantDeadline").value) : null,
+    legal_basis: $("fLegal").value.trim() || null,
+    notes: $("fNotes").value.trim() || null,
+  };
+  try {
+    await ADMIN.api("upsert_compliance_rule", { rule });
+    $("modalBg").classList.remove("show");
+    alertBox("success", `Rule ${editing ? "updated" : "created"}.`);
+    await load();
+  } catch (e) {
+    modalAlert("error", e.message || "Save failed.");
+  }
+}
+
+async function del() {
+  if (!editing) return;
+  if (!confirm(`Delete the "${editing.name}" rule for ${editing.jurisdiction}? This will remove pending placeholder rows on every property in the jurisdiction. Records with a filed certificate will block the delete.`)) return;
+  try {
+    await ADMIN.api("delete_compliance_rule", { id: editing.id });
+    $("modalBg").classList.remove("show");
+    alertBox("success", "Rule deleted.");
+    await load();
+  } catch (e) {
+    modalAlert("error", e.message || "Delete failed.");
+  }
+}
+
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { activeJ = b.dataset.j; render(); }));
+$("newBtn").addEventListener("click", openNew);
+$("cancelBtn").addEventListener("click", () => $("modalBg").classList.remove("show"));
+$("saveBtn").addEventListener("click", save);
+$("deleteBtn").addEventListener("click", del);
+$("modalBg").addEventListener("click", (e) => { if (e.target.id === "modalBg") $("modalBg").classList.remove("show"); });
+
+await load();
+</script>
+</body>
+</html>

@@ -117,6 +117,7 @@ const ADMIN = {
       { href: "/audit.html",      id: "audit",      label: "Audit log"  },
       { href: "/retention.html",  id: "retention",  label: "Retention"  },
       { href: "/dsar.html",       id: "dsar",       label: "DSAR"       },
+      { href: "/compliance.html", id: "compliance", label: "Compliance" },
       { href: "/settings.html",   id: "settings",   label: "Settings"   },
     ];
     const html = `
