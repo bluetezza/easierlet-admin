@@ -195,6 +195,54 @@
           b.disabled = false;
         }
       }));
+
+      // ── Trial-workflow testing tools ──
+      const trialResult = document.getElementById("trialTestResult");
+      const showTrialResult = (kind, msg) => {
+        trialResult.innerHTML = `<div class="alert ${kind}" style="margin-top:0">${ADMIN.esc(msg)}</div>`;
+      };
+
+      document.querySelectorAll("[data-trial-end]").forEach((b) => b.addEventListener("click", async () => {
+        const daysFromNow = Number(b.dataset.trialEnd);
+        b.disabled = true; const orig = b.textContent; b.textContent = "Setting…";
+        try {
+          const r = await ADMIN.api("set_trial_end", { landlord_id: landlordId, days_from_now: daysFromNow });
+          showTrialResult("success", `Trial set to end ${daysFromNow >= 0 ? `in ${daysFromNow} day(s)` : `${-daysFromNow} day(s) ago`}. Reminder stage reset. Click "Run trial-lifecycle now" to fire reminder/expiry emails.`);
+          load();
+        } catch (e) {
+          showTrialResult("error", e.message || "Couldn't set trial end.");
+        } finally { b.disabled = false; b.textContent = orig; }
+      }));
+
+      const runLifecycle = async (dryRun) => {
+        const buttons = [document.getElementById("runLifecycleBtn"), document.getElementById("runLifecycleDryBtn")];
+        buttons.forEach(b => { if (b) b.disabled = true; });
+        try {
+          const r = await ADMIN.api("run_trial_lifecycle", { mode: "all", dry_run: dryRun });
+          const summary = `Considered ${r.considered ?? 0}. Sent: 3-day=${r.reminder_3d ?? 0} · 1-day=${r.reminder_1d ?? 0} · expired=${r.expired ?? 0}${r.errors ? ` · errors=${r.errors}` : ""}.${dryRun ? " (dry-run — no emails sent, no DB writes)" : ""}`;
+          showTrialResult("success", summary);
+          load();
+        } catch (e) {
+          showTrialResult("error", e.message || "Lifecycle run failed.");
+        } finally {
+          buttons.forEach(b => { if (b) b.disabled = false; });
+        }
+      };
+      document.getElementById("runLifecycleBtn")?.addEventListener("click", () => runLifecycle(false));
+      document.getElementById("runLifecycleDryBtn")?.addEventListener("click", () => runLifecycle(true));
+
+      document.getElementById("resetTrialBtn")?.addEventListener("click", async () => {
+        if (!confirm("Reset this landlord to a fresh 14-day trial? Their current subscription state will be replaced.")) return;
+        const btn = document.getElementById("resetTrialBtn");
+        btn.disabled = true;
+        try {
+          await ADMIN.api("reset_trial", { landlord_id: landlordId });
+          showTrialResult("success", "Trial reset to a fresh 14-day window. Subscription back to 'trialing'.");
+          load();
+        } catch (e) {
+          showTrialResult("error", e.message || "Reset failed.");
+        } finally { btn.disabled = false; }
+      });
       document.getElementById("genDsarBtn")?.addEventListener("click", async () => {
         const btn = document.getElementById("genDsarBtn");
         btn.disabled = true; btn.textContent = "Generating…";
@@ -233,6 +281,22 @@
         <button class="btn btn-secondary" data-extend="14">Extend trial 14 days</button>
         <button class="btn btn-secondary" data-extend="30">Extend trial 30 days</button>
         <button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button>
+      </div>
+      <div style="margin-top:18px;padding:14px;background:#FFF8EC;border:1px dashed #F0D080;border-radius:10px;font-size:13px">
+        <div style="font-weight:600;margin-bottom:8px;color:#8A6000">🧪 Trial workflow testing</div>
+        <div style="color:#6B8278;margin-bottom:10px">Fast-forward this landlord's trial to test reminder emails + Stripe upgrade flow without waiting 14 days. Each "Set trial ends" call also resets the reminder stage so emails re-send.</div>
+        <div class="row-actions">
+          <button class="btn btn-secondary" data-trial-end="3">Set trial ends in 3 days</button>
+          <button class="btn btn-secondary" data-trial-end="1">Set trial ends in 1 day</button>
+          <button class="btn btn-secondary" data-trial-end="0">Set trial ended (today)</button>
+          <button class="btn btn-secondary" data-trial-end="-2">Set trial ended 2 days ago</button>
+        </div>
+        <div class="row-actions" style="margin-top:10px">
+          <button class="btn btn-primary" id="runLifecycleBtn">▶ Run trial-lifecycle now</button>
+          <button class="btn btn-ghost" id="runLifecycleDryBtn">Dry run (no emails / no DB writes)</button>
+          <button class="btn btn-secondary" id="resetTrialBtn">Reset to fresh 14-day trial</button>
+        </div>
+        <div id="trialTestResult" style="margin-top:10px"></div>
       </div>
     `;
   }
