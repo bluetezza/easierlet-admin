@@ -231,6 +231,21 @@
       document.getElementById("runLifecycleBtn")?.addEventListener("click", () => runLifecycle(false));
       document.getElementById("runLifecycleDryBtn")?.addEventListener("click", () => runLifecycle(true));
 
+      document.getElementById("cleanupDupesBtn")?.addEventListener("click", async () => {
+        if (!confirm("Cancel every active Stripe subscription on this customer except the most recent one?")) return;
+        const btn = document.getElementById("cleanupDupesBtn");
+        btn.disabled = true; btn.textContent = "Cancelling…";
+        try {
+          const r = await ADMIN.api("cleanup_duplicate_stripe_subs", { landlord_id: landlordId });
+          showTrialResult("success", r.cancelled
+            ? `Cancelled ${r.cancelled} duplicate sub(s). Kept ${r.kept}.`
+            : (r.message || "Already clean — nothing to cancel."));
+          load();
+        } catch (e) {
+          showTrialResult("error", e.message || "Cleanup failed.");
+        } finally { btn.disabled = false; btn.textContent = "🧹 Cancel duplicate Stripe subs"; }
+      });
+
       document.getElementById("reconcileStripeBtn")?.addEventListener("click", async () => {
         const btn = document.getElementById("reconcileStripeBtn");
         btn.disabled = true; btn.textContent = "Reconciling…";
@@ -314,7 +329,11 @@
         </div>
         <div class="row-actions" style="margin-top:10px">
           <button class="btn btn-secondary" id="reconcileStripeBtn">🔄 Reconcile from Stripe</button>
-          <span style="font-size:12px;color:#6B8278">Pulls the latest subscription state from Stripe by customer ID — fixes rows where a webhook was missed.</span>
+          <button class="btn btn-secondary" id="cleanupDupesBtn">🧹 Cancel duplicate Stripe subs</button>
+        </div>
+        <div style="font-size:12px;color:#6B8278;margin-top:6px">
+          <strong>Reconcile</strong> pulls the latest subscription state from Stripe by customer ID — fixes rows where a webhook was missed.
+          <strong>Cancel duplicates</strong> immediately cancels every active Stripe subscription except the most recent one (in case multiple were created accidentally).
         </div>
         <div id="trialTestResult" style="margin-top:10px"></div>
       </div>
