@@ -231,6 +231,22 @@
       document.getElementById("runLifecycleBtn")?.addEventListener("click", () => runLifecycle(false));
       document.getElementById("runLifecycleDryBtn")?.addEventListener("click", () => runLifecycle(true));
 
+      document.getElementById("reconcileStripeBtn")?.addEventListener("click", async () => {
+        const btn = document.getElementById("reconcileStripeBtn");
+        btn.disabled = true; btn.textContent = "Reconciling…";
+        try {
+          const r = await ADMIN.api("reconcile_stripe", { landlord_id: landlordId });
+          if (r.found) {
+            showTrialResult("success", `Synced from Stripe — plan=${r.plan ?? "—"}, status=${r.status}, sub=${r.subscription_id}.`);
+            load();
+          } else {
+            showTrialResult("warn", r.message || "No active subscription found on Stripe — checkout was likely abandoned.");
+          }
+        } catch (e) {
+          showTrialResult("error", e.message || "Reconcile failed.");
+        } finally { btn.disabled = false; btn.textContent = "🔄 Reconcile from Stripe"; }
+      });
+
       document.getElementById("resetTrialBtn")?.addEventListener("click", async () => {
         if (!confirm("Reset this landlord to a fresh 14-day trial? Their current subscription state will be replaced.")) return;
         const btn = document.getElementById("resetTrialBtn");
@@ -295,6 +311,10 @@
           <button class="btn btn-primary" id="runLifecycleBtn">▶ Run trial-lifecycle now</button>
           <button class="btn btn-ghost" id="runLifecycleDryBtn">Dry run (no emails / no DB writes)</button>
           <button class="btn btn-secondary" id="resetTrialBtn">Reset to fresh 14-day trial</button>
+        </div>
+        <div class="row-actions" style="margin-top:10px">
+          <button class="btn btn-secondary" id="reconcileStripeBtn">🔄 Reconcile from Stripe</button>
+          <span style="font-size:12px;color:#6B8278">Pulls the latest subscription state from Stripe by customer ID — fixes rows where a webhook was missed.</span>
         </div>
         <div id="trialTestResult" style="margin-top:10px"></div>
       </div>
