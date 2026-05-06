@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Support — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/admin.css">
+
+  <style>
+    .seg { display: inline-flex; background: #E5EAE7; padding: 4px; border-radius: 999px; gap: 4px; margin-bottom: 16px; }
+    .seg button { background: transparent; border: none; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; color: var(--el-muted); font-family: inherit; }
+    .seg button.active { background: white; color: var(--el-green, #1A6B55); font-weight: 600; }
+
+    .ticket-row { display:flex; gap:14px; align-items:center; padding:14px 0; border-bottom:1px solid var(--el-line); cursor:pointer; }
+    .ticket-row:hover .subj { color: var(--el-green); }
+    .ticket-row .meta { flex:1; }
+    .ticket-row .subj { font-weight:600; }
+    .ticket-row .sub  { font-size:12px; color:var(--el-muted); margin-top:2px; }
+
+    .pill { font-size:11px; font-weight:600; padding:3px 8px; border-radius:999px; }
+    .pill-open       { background:#FFF8EC; color:#8A6000; }
+    .pill-awaiting   { background:#E5F1EC; color:#1A6B55; }
+    .pill-progress   { background:#DCEEFA; color:#22577A; }
+    .pill-closed     { background:#E5EAE7; color:#6B8278; }
+    .pill-plan       { background:#F5F7F5; color:var(--el-ink); border:1px solid var(--el-line); }
+
+    .msg { padding:14px; border-radius:10px; margin-bottom:10px; }
+    .msg.from-user   { background:#F5F7F5; }
+    .msg.from-admin  { background:#E5F1EC; border-left:3px solid var(--el-green, #1A6B55); }
+    .msg.from-system { background:#F0F0EE; font-style:italic; color:var(--el-muted); font-size:12px; }
+    .msg.internal    { background:#FFF8EC; border-left:3px solid #F0D080; }
+    .msg-head { font-size:12px; color:var(--el-muted); margin-bottom:6px; }
+    .msg-body { white-space:pre-wrap; line-height:1.5; }
+
+    textarea.adm { width:100%; padding:12px; border:1px solid var(--el-line); border-radius:10px; min-height:120px; font-family:inherit; font-size:14px; }
+  </style>
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Support</h1>
+    <div class="sub">Tickets opened by landlords. Replies email the user automatically.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div id="listView">
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="seg" role="tablist">
+            <button data-status=""               class="active">All open</button>
+            <button data-status="open">New</button>
+            <button data-status="awaiting_user">Awaiting user</button>
+            <button data-status="in_progress">In progress</button>
+            <button data-status="closed">Closed</button>
+          </div>
+        </div>
+      </div>
+      <div id="ticketList"></div>
+    </div>
+  </div>
+
+  <div id="threadView" style="display:none">
+    <a href="#" id="backLink" class="row-link">← All tickets</a>
+    <div class="card" style="margin-top:14px">
+      <div class="card-head">
+        <div>
+          <div class="card-title" id="thSubject">—</div>
+          <div class="card-sub" id="thMeta">—</div>
+        </div>
+      </div>
+      <div id="messageList"></div>
+      <div style="margin-top:14px;border-top:1px solid var(--el-line);padding-top:14px">
+        <textarea class="adm" id="replyBody" placeholder="Reply to the landlord…"></textarea>
+        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="internalChk"> Internal note (not sent to landlord)</label>
+          <select id="newStatus" class="btn btn-ghost" style="font-size:13px;padding:8px 10px">
+            <option value="">Don't change status</option>
+            <option value="awaiting_user">Mark "Awaiting user"</option>
+            <option value="in_progress">Mark "In progress"</option>
+            <option value="closed">Mark "Closed"</option>
+          </select>
+          <button class="btn btn-primary" id="sendReplyBtn" style="margin-left:auto">Send reply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import "/assets/admin.js";
+const ADMIN = window.ADMIN;
+const $ = (id) => document.getElementById(id);
+
+const admin = await ADMIN.requireAdminSession();
+if (!admin) throw new Error("redirecting");
+ADMIN.mountHeader("support", admin);
+
+let activeStatus = "";  // "" = all open
+let activeTicketId = new URLSearchParams(location.search).get("id");
+
+function alertBox(kind, msg) {
+  const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg;
+  setTimeout(() => { a.className = "alert"; a.textContent = ""; }, 5000);
+}
+
+function pill(status) {
+  const map = {
+    open: '<span class="pill pill-open">Open</span>',
+    awaiting_user: '<span class="pill pill-awaiting">Awaiting user</span>',
+    in_progress: '<span class="pill pill-progress">In progress</span>',
+    closed: '<span class="pill pill-closed">Closed</span>',
+  };
+  return map[status] || `<span class="pill pill-open">${ADMIN.esc(status)}</span>`;
+}
+
+function fmt(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso); if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString("en-GB", { day:"2-digit", month:"short", year:"numeric", hour:"2-digit", minute:"2-digit" });
+}
+
+function showView(name) {
+  $("listView").style.display = name === "list" ? "" : "none";
+  $("threadView").style.display = name === "thread" ? "" : "none";
+}
+
+// ── List ─────────────────────────────────────────────────────────────────
+async function loadList() {
+  const params = activeStatus ? { status: activeStatus } : {};
+  let res;
+  try {
+    res = await ADMIN.api("list_support_tickets", params);
+  } catch (e) {
+    $("ticketList").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    return;
+  }
+  const tickets = res.tickets || [];
+  // For "All open" we only show non-closed
+  const visible = activeStatus === "" ? tickets.filter(t => t.status !== "closed") : tickets;
+  if (visible.length === 0) {
+    $("ticketList").innerHTML = `<div class="empty">No tickets here.</div>`;
+    return;
+  }
+  $("ticketList").innerHTML = visible.map(t => {
+    const planTag = t.plan_at_open ? `<span class="pill pill-plan" style="margin-left:8px">${ADMIN.esc(t.plan_at_open)}</span>` : "";
+    const lname = t.landlord?.director_name || t.landlord?.contact_email || t.user_id;
+    return `
+      <div class="ticket-row" data-id="${ADMIN.esc(t.id)}">
+        <div class="meta">
+          <div class="subj">${ADMIN.esc(t.subject)} ${planTag}</div>
+          <div class="sub">${ADMIN.esc(lname)} · ${ADMIN.esc((t.category || "general"))} · updated ${ADMIN.esc(fmt(t.updated_at))}</div>
+        </div>
+        ${pill(t.status)}
+      </div>
+    `;
+  }).join("");
+  document.querySelectorAll(".ticket-row").forEach(el => el.addEventListener("click", () => openThread(el.dataset.id)));
+}
+
+// ── Thread ───────────────────────────────────────────────────────────────
+async function openThread(id) {
+  activeTicketId = id;
+  history.replaceState({}, "", `?id=${encodeURIComponent(id)}`);
+  showView("thread");
+  $("messageList").innerHTML = `<div class="empty">Loading…</div>`;
+  let res;
+  try { res = await ADMIN.api("view_support_ticket", { ticket_id: id }); }
+  catch (e) { alertBox("error", e.message); return; }
+
+  const t = res.ticket;
+  const ll = res.landlord || {};
+  const llName = ll.director_name || ll.contact_email || t.user_id;
+  $("thSubject").textContent = t.subject;
+  $("thMeta").innerHTML = `${pill(t.status)} · ${ADMIN.esc(llName)} ${ll.contact_email ? `&lt;${ADMIN.esc(ll.contact_email)}&gt;` : ""} · plan ${ADMIN.esc(t.plan_at_open || "—")} · opened ${ADMIN.esc(fmt(t.created_at))} · category ${ADMIN.esc(t.category || "—")}`;
+
+  const msgs = res.messages || [];
+  $("messageList").innerHTML = msgs.map(m => {
+    const who = m.author_type === "admin" ? "EasierLet support" : (m.author_type === "system" ? "System" : llName);
+    const cls = m.internal ? "internal" : (`from-${m.author_type}`);
+    const tag = m.internal ? `<span class="pill pill-plan" style="background:#FFF8EC;color:#8A6000;border:none;margin-left:6px">internal note</span>` : "";
+    return `
+      <div class="msg ${cls}">
+        <div class="msg-head"><strong>${ADMIN.esc(who)}</strong>${tag} · ${ADMIN.esc(fmt(m.created_at))}</div>
+        <div class="msg-body">${ADMIN.esc(m.body)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+$("backLink").addEventListener("click", (e) => { e.preventDefault(); activeTicketId = null; history.replaceState({}, "", "/support.html"); showView("list"); });
+
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("active", x === b));
+  activeStatus = b.dataset.status;
+  loadList();
+}));
+
+$("sendReplyBtn").addEventListener("click", async () => {
+  const body = $("replyBody").value.trim();
+  if (!body || !activeTicketId) return;
+  const internal = $("internalChk").checked;
+  const status = $("newStatus").value || undefined;
+  const btn = $("sendReplyBtn"); btn.disabled = true; btn.textContent = "Sending…";
+  try {
+    await ADMIN.api("reply_support_ticket", { ticket_id: activeTicketId, body, internal, status });
+    $("replyBody").value = ""; $("internalChk").checked = false; $("newStatus").value = "";
+    await openThread(activeTicketId);
+    await loadList();
+  } catch (e) {
+    alertBox("error", e.message || "Couldn't send reply.");
+  } finally { btn.disabled = false; btn.textContent = "Send reply"; }
+});
+
+// Boot
+await loadList();
+if (activeTicketId) openThread(activeTicketId);
+else showView("list");
+</script>
+</body>
+</html>
