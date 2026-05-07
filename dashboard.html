@@ -25,7 +25,7 @@
     <div class="spinner"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="landlordList">
     <div class="card-head">
       <div>
         <div class="card-title">Search landlords</div>
@@ -33,11 +33,12 @@
       </div>
       <button class="btn btn-secondary" id="inviteOpenBtn">+ Invite landlord</button>
     </div>
+    <div id="landlordFilterChip"></div>
     <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
       <input type="search" id="searchInput" placeholder="Search…" />
       <button class="btn btn-primary" id="searchBtn">Search</button>
     </div>
-    <div id="landlordList" style="margin-top:14px"></div>
+    <div id="landlordListBody" style="margin-top:14px"></div>
   </div>
 
   <!-- Invite landlord modal -->
@@ -69,7 +70,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=6";
+  import "/assets/admin.js?v=7";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -88,38 +89,42 @@
       ]);
       const c = data.counts;
       $("statsGrid").innerHTML = `
-        <div class="stat-tile">
+        <a href="#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Landlords</div>
           <div class="value">${c.landlords}</div>
           <div class="sub">All accounts</div>
-        </div>
-        <div class="stat-tile">
+        </a>
+        <a href="#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Properties (active)</div>
           <div class="value">${c.properties}</div>
-        </div>
-        <div class="stat-tile">
+          <div class="sub">View landlords</div>
+        </a>
+        <a href="#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Tenants (active)</div>
           <div class="value">${c.tenants}</div>
-        </div>
-        <div class="stat-tile">
+          <div class="sub">View landlords</div>
+        </a>
+        <a href="?subscription_status=active#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Subscriptions</div>
           <div class="value">${c.active}</div>
           <div class="sub">+ ${c.trialing} trialing · ${c.past_due} past due</div>
-        </div>
-        <div class="stat-tile ${c.trial_ends_this_week > 0 ? 'warn' : ''}">
+        </a>
+        <a href="?trial_ending_within_days=7#landlordList" class="stat-tile ${c.trial_ends_this_week > 0 ? 'warn' : ''}" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Trials ending this week</div>
           <div class="value">${c.trial_ends_this_week}</div>
           <div class="sub">Next 7 days</div>
-        </div>
-        <div class="stat-tile">
+        </a>
+        <a href="/maintenance.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Open maintenance</div>
           <div class="value">${c.open_maintenance}</div>
-        </div>
-        <div class="stat-tile">
+          <div class="sub">View list</div>
+        </a>
+        <a href="/visits.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Upcoming visits</div>
           <div class="value">${c.upcoming_visits}</div>
-        </div>
-        <a href="/support.html" class="stat-tile ${supportSummary.needs_reply > 0 ? 'alert' : ''}" id="supportTile" style="text-decoration:none;display:block">
+          <div class="sub">View list</div>
+        </a>
+        <a href="/support.html" class="stat-tile ${supportSummary.needs_reply > 0 ? 'alert' : ''}" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Support — needs reply</div>
           <div class="value">${supportSummary.needs_reply}</div>
           <div class="sub">${supportSummary.total_open} open ticket${supportSummary.total_open === 1 ? '' : 's'} total</div>
@@ -147,15 +152,50 @@
     `;
   }
 
+  // Read URL params so the dashboard tiles can deep-link into a filtered list.
+  function readUrlFilter() {
+    const u = new URLSearchParams(location.search);
+    const sub = u.get("subscription_status");
+    const days = Number(u.get("trial_ending_within_days"));
+    return {
+      subscription_status: sub || null,
+      trial_ending_within_days: Number.isFinite(days) && days > 0 ? days : null,
+    };
+  }
+
+  function renderFilterChip() {
+    const f = readUrlFilter();
+    if (!f.subscription_status && !f.trial_ending_within_days) {
+      $("landlordFilterChip").innerHTML = "";
+      return;
+    }
+    const label = f.trial_ending_within_days
+      ? `Trials ending in next ${f.trial_ending_within_days} day${f.trial_ending_within_days === 1 ? '' : 's'}`
+      : `Status: ${f.subscription_status}`;
+    $("landlordFilterChip").innerHTML = `
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--el-green-pale);color:var(--el-green);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:500;margin-bottom:10px">
+        Filtered: ${ADMIN.esc(label)}
+        <a href="/dashboard.html#landlordList" style="color:var(--el-green);text-decoration:underline;font-size:12px">clear</a>
+      </div>`;
+  }
+
   async function loadLandlords(search = "") {
-    $("landlordList").innerHTML = `<div class="spinner"></div>`;
+    $("landlordListBody").innerHTML = `<div class="spinner"></div>`;
+    renderFilterChip();
+    const f = readUrlFilter();
     try {
-      const data = await ADMIN.api("list_landlords", { page: 1, per_page: 50, search });
+      const data = await ADMIN.api("list_landlords", {
+        page: 1,
+        per_page: 50,
+        search,
+        subscription_status: f.subscription_status ?? undefined,
+        trial_ending_within_days: f.trial_ending_within_days ?? undefined,
+      });
       if (!data.landlords.length) {
-        $("landlordList").innerHTML = `<div class="empty">No landlords match.</div>`;
+        $("landlordListBody").innerHTML = `<div class="empty">No landlords match.</div>`;
         return;
       }
-      $("landlordList").innerHTML = `
+      $("landlordListBody").innerHTML = `
         <table class="table">
           <thead>
             <tr>
@@ -178,7 +218,7 @@
         <div style="text-align:right;margin-top:8px;color:var(--el-muted);font-size:12px">${data.total} total</div>
       `;
     } catch (e) {
-      $("landlordList").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+      $("landlordListBody").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
     }
   }
 

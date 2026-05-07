@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Upcoming visits — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Upcoming visits</h1>
+    <div class="sub">Property visits scheduled today or later that aren't cancelled or completed.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title" id="cardTitle">All upcoming</div>
+        <div class="card-sub">Earliest first.</div>
+      </div>
+    </div>
+    <div id="rows"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=7";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  function statusPill(s) {
+    const map = {
+      scheduled: "green", confirmed: "green",
+      pending: "blue", proposed: "orange",
+      declined: "red",
+    };
+    return `<span class="pill pill-${map[s] || 'grey'}">${ADMIN.esc(s.replace(/_/g, ' '))}</span>`;
+  }
+
+  function fmtTimeRange(from, to) {
+    if (!from && !to) return "";
+    const f = from ? from.slice(0,5) : "";
+    const t = to ? to.slice(0,5) : "";
+    return f && t ? `${f}–${t}` : (f || t);
+  }
+
+  async function load() {
+    try {
+      const data = await ADMIN.api("list_admin_visits");
+      const items = data.items || [];
+      $("cardTitle").textContent = `${items.length} upcoming visit${items.length === 1 ? '' : 's'}`;
+      if (!items.length) {
+        $("rows").innerHTML = `<div class="empty">No upcoming visits.</div>`;
+        return;
+      }
+      $("rows").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>When</th><th>Type</th><th>Landlord</th><th>Property</th>
+              <th>Title</th><th>Contractor</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>${items.map((v) => {
+            const ll = v.landlord || {};
+            const llName = ll.director_name || ll.contact_email || "—";
+            const prop = v.property || {};
+            const addr = [prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(", ") || "—";
+            const llHref = `/landlord.html?id=${ADMIN.esc(v.user_id)}`;
+            const time = fmtTimeRange(v.scheduled_time_from, v.scheduled_time_to);
+            return `
+              <tr>
+                <td>
+                  <div>${ADMIN.fmtDate(v.scheduled_date)}</div>
+                  ${time ? `<div style="color:var(--el-muted);font-size:12px">${ADMIN.esc(time)}</div>` : ""}
+                </td>
+                <td><code style="font-size:12px">${ADMIN.esc(v.visit_type || "—")}</code></td>
+                <td><a href="${llHref}">${ADMIN.esc(llName)}</a></td>
+                <td>${ADMIN.esc(addr)}</td>
+                <td>${ADMIN.esc(v.title || "—")}</td>
+                <td>${v.contractor_name ? ADMIN.esc(v.contractor_name) : "—"}</td>
+                <td>${statusPill(v.status)}</td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load visits.");
+    }
+  }
+  load();
+</script>
+
+</body>
+</html>
