@@ -35,6 +35,26 @@
     .msg-body { white-space:pre-wrap; line-height:1.5; }
 
     textarea.adm { width:100%; padding:12px; border:1px solid var(--el-line); border-radius:10px; min-height:120px; font-family:inherit; font-size:14px; }
+
+    .status-opt { display:inline-flex; }
+    .status-opt input { position:absolute; opacity:0; pointer-events:none; }
+    .status-opt span {
+      display:inline-block; padding:6px 12px; border-radius:999px;
+      border:1px solid var(--el-green-border, #C4DDD6); background:#fff;
+      font-size:13px; color:var(--el-ink); cursor:pointer;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    }
+    .status-opt:hover span { border-color: var(--el-green, #1A6B55); }
+    .status-opt input:checked + span {
+      background: var(--el-green, #1A6B55); color:#fff; border-color: var(--el-green, #1A6B55);
+      font-weight:600;
+    }
+    .status-opt input:focus-visible + span { outline: 2px solid var(--el-green, #1A6B55); outline-offset: 2px; }
+    #statusRow.is-internal { opacity: 0.5; }
+    #statusRow.is-internal::after {
+      content: 'Internal notes don\'t change ticket status'; display:block;
+      font-size:12px; color:var(--el-muted); flex-basis:100%; margin-top:4px;
+    }
   </style>
 </head>
 <body>
@@ -78,14 +98,19 @@
       <div id="messageList"></div>
       <div style="margin-top:14px;border-top:1px solid var(--el-line);padding-top:14px">
         <textarea class="adm" id="replyBody" placeholder="Reply to the landlord…"></textarea>
-        <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+
+        <div id="statusRow" style="margin-top:14px;background:var(--el-green-pale);border:1px solid var(--el-green-border, #C4DDD6);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-size:13px;font-weight:600;color:var(--el-green);text-transform:uppercase;letter-spacing:0.5px">After sending →</span>
+          <div role="radiogroup" id="statusOptions" style="display:inline-flex;gap:6px;flex-wrap:wrap">
+            <label class="status-opt"><input type="radio" name="newStatusRadio" value="awaiting_user" checked><span>Awaiting user</span></label>
+            <label class="status-opt"><input type="radio" name="newStatusRadio" value="in_progress"><span>In progress</span></label>
+            <label class="status-opt"><input type="radio" name="newStatusRadio" value="closed"><span>Close ticket</span></label>
+            <label class="status-opt"><input type="radio" name="newStatusRadio" value=""><span>Don't change</span></label>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="internalChk"> Internal note (not sent to landlord)</label>
-          <select id="newStatus" class="btn btn-ghost" style="font-size:13px;padding:8px 10px">
-            <option value="">Don't change status</option>
-            <option value="awaiting_user">Mark "Awaiting user"</option>
-            <option value="in_progress">Mark "In progress"</option>
-            <option value="closed">Mark "Closed"</option>
-          </select>
           <button class="btn btn-primary" id="sendReplyBtn" style="margin-left:auto">Send reply</button>
         </div>
       </div>
@@ -94,7 +119,7 @@
 </main>
 
 <script type="module">
-import "/assets/admin.js?v=4";
+import "/assets/admin.js?v=5";
 const ADMIN = window.ADMIN;
 const $ = (id) => document.getElementById(id);
 
@@ -202,15 +227,34 @@ document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click"
   loadList();
 }));
 
+function selectedStatus() {
+  const checked = document.querySelector('input[name="newStatusRadio"]:checked');
+  return checked && checked.value ? checked.value : undefined;
+}
+function resetStatusToDefault() {
+  document.querySelectorAll('input[name="newStatusRadio"]').forEach(r => { r.checked = (r.value === "awaiting_user"); });
+}
+
+// Internal notes don't flip ticket status — gray the picker out so it's
+// obvious nothing will happen.
+$("internalChk").addEventListener("change", () => {
+  const internal = $("internalChk").checked;
+  document.getElementById("statusRow").classList.toggle("is-internal", internal);
+  document.querySelectorAll('input[name="newStatusRadio"]').forEach(r => { r.disabled = internal; });
+});
+
 $("sendReplyBtn").addEventListener("click", async () => {
   const body = $("replyBody").value.trim();
   if (!body || !activeTicketId) return;
   const internal = $("internalChk").checked;
-  const status = $("newStatus").value || undefined;
+  const status = internal ? undefined : selectedStatus();
   const btn = $("sendReplyBtn"); btn.disabled = true; btn.textContent = "Sending…";
   try {
     await ADMIN.api("reply_support_ticket", { ticket_id: activeTicketId, body, internal, status });
-    $("replyBody").value = ""; $("internalChk").checked = false; $("newStatus").value = "";
+    $("replyBody").value = ""; $("internalChk").checked = false;
+    document.getElementById("statusRow").classList.remove("is-internal");
+    document.querySelectorAll('input[name="newStatusRadio"]').forEach(r => { r.disabled = false; });
+    resetStatusToDefault();
     await openThread(activeTicketId);
     await loadList();
   } catch (e) {
