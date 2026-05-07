@@ -84,6 +84,26 @@
     <div id="lDocs"></div>
   </div>
 
+  <div class="card" id="cardSubHistory">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Subscription history</div>
+        <div class="card-sub">Every plan + status transition. Tells you whether "expired" means an unconverted trial, or a paid sub that lapsed.</div>
+      </div>
+    </div>
+    <div id="lSubHistory"></div>
+  </div>
+
+  <div class="card" id="cardLoginActivity">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Login activity</div>
+        <div class="card-sub">Webapp vs iOS sign-ins, last seen on each platform.</div>
+      </div>
+    </div>
+    <div id="lLoginActivity"></div>
+  </div>
+
   <div class="card">
     <div class="card-head">
       <div>
@@ -96,7 +116,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=2";
+  import "/assets/admin.js?v=3";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -180,6 +200,8 @@
           alertBox("error", e.message || "Could not open document.");
         } finally { b.disabled = false; b.textContent = orig; }
       }));
+      $("lSubHistory").innerHTML = renderSubscriptionHistory(data.subscription_events || []);
+      $("lLoginActivity").innerHTML = renderLoginActivity(data.login_summary || null);
       $("lAudit").innerHTML = renderAudits(audits);
 
       // Wire up extend trial
@@ -480,6 +502,79 @@
     `;
 
     return summaryTable + fileTable;
+  }
+
+  function renderSubscriptionHistory(events) {
+    if (!events.length) return `<div class="empty">No subscription events recorded yet.</div>`;
+    const labelMap = {
+      trial_started:        "Trial started",
+      trial_extended:       "Trial extended",
+      trial_end_set:        "Trial end manually set",
+      trial_reset:          "Trial reset",
+      trial_expired:        "Trial expired (unconverted)",
+      trial_converted:      "Trial → Paid",
+      subscription_started: "Subscription started",
+      plan_changed:         "Plan changed",
+      status_changed:       "Status changed",
+      renewed:              "Renewed",
+      payment_failed:       "Payment failed",
+      reactivated:          "Reactivated",
+      cancelled:            "Cancelled",
+      expired:              "Expired (paid)",
+      stripe_reconciled:    "Reconciled with Stripe",
+    };
+    const sourceLabel = { signup: "signup", stripe_webhook: "Stripe", cron: "system", admin: "admin", system: "system" };
+    function transition(e) {
+      const planFrom = e.from_plan ?? "—", planTo = e.to_plan ?? "—";
+      const statusFrom = e.from_status ?? "—", statusTo = e.to_status ?? "—";
+      const planChange = (e.from_plan || e.to_plan) && e.from_plan !== e.to_plan
+        ? `<span style="color:var(--el-muted)">plan</span> ${ADMIN.esc(planFrom)} → <strong>${ADMIN.esc(planTo)}</strong>` : "";
+      const statusChange = (e.from_status || e.to_status) && e.from_status !== e.to_status
+        ? `<span style="color:var(--el-muted)">status</span> ${ADMIN.esc(statusFrom)} → <strong>${ADMIN.esc(statusTo)}</strong>` : "";
+      return [planChange, statusChange].filter(Boolean).join(" · ") || `<span style="color:var(--el-muted)">no field changes</span>`;
+    }
+    return `
+      <table class="table">
+        <thead><tr><th>When</th><th>Event</th><th>Transition</th><th>Source</th></tr></thead>
+        <tbody>${events.map((e) => `
+          <tr>
+            <td><div>${ADMIN.fmtDateTime(e.occurred_at)}</div><div style="color:var(--el-muted);font-size:12px">${ADMIN.relTime(e.occurred_at)}</div></td>
+            <td><strong>${ADMIN.esc(labelMap[e.event_type] || e.event_type)}</strong></td>
+            <td>${transition(e)}</td>
+            <td><code style="font-size:12px">${ADMIN.esc(sourceLabel[e.source] || e.source)}</code></td>
+          </tr>`).join("")}</tbody>
+      </table>
+    `;
+  }
+
+  function renderLoginActivity(summary) {
+    if (!summary || summary.total === 0) {
+      return `<div class="empty">No sign-ins recorded yet. Login tracking starts from the deploy of the new client builds.</div>`;
+    }
+    const tile = (label, value, sub) => `
+      <div class="stat-tile" style="cursor:default">
+        <div class="label">${ADMIN.esc(label)}</div>
+        <div class="value" style="font-size:22px">${ADMIN.esc(String(value))}</div>
+        ${sub ? `<div class="sub">${ADMIN.esc(sub)}</div>` : ""}
+      </div>`;
+    const tiles = `
+      <div class="stats-grid" style="margin-bottom:14px">
+        ${tile("Total sign-ins", summary.total, summary.last_seen_at ? `Last seen ${ADMIN.relTime(summary.last_seen_at)}` : "")}
+        ${tile("Webapp", summary.web_count, summary.last_seen_web ? `Last ${ADMIN.relTime(summary.last_seen_web)}` : "—")}
+        ${tile("iOS", summary.ios_count, summary.last_seen_ios ? `Last ${ADMIN.relTime(summary.last_seen_ios)}` : "—")}
+        ${summary.android_count ? tile("Android", summary.android_count, "") : ""}
+      </div>`;
+    const recent = (summary.recent || []).length === 0
+      ? `<div class="empty">No recent sign-ins.</div>`
+      : `<table class="table">
+          <thead><tr><th>When</th><th>Platform</th></tr></thead>
+          <tbody>${summary.recent.map((r) => `
+            <tr>
+              <td>${ADMIN.fmtDateTime(r.occurred_at)} <small style="color:var(--el-muted)">(${ADMIN.relTime(r.occurred_at)})</small></td>
+              <td><code style="font-size:12px">${ADMIN.esc(r.platform)}</code></td>
+            </tr>`).join("")}</tbody>
+        </table>`;
+    return tiles + recent;
   }
 
   function renderAudits(audits) {
