@@ -165,7 +165,7 @@
               <td>${ADMIN.esc(l.company_name || "—")}</td>
               <td>${l.property_count_active}${l.property_count_archived ? ` <small style="color:var(--el-muted)">(+${l.property_count_archived} archived)</small>` : ""}</td>
               <td>${l.tenant_count}</td>
-              <td>${ADMIN.esc(l.subscription?.plan ?? "—")}</td>
+              <td>${ADMIN.esc(ADMIN.tierLabel(l.subscription))}</td>
               <td>${ADMIN.statusPill(l.subscription?.status ?? "—")}</td>
               <td><a class="btn btn-secondary" href="/landlord.html?id=${ADMIN.esc(l.user_id)}">Open</a></td>
             </tr>`).join("")}</tbody>

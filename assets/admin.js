@@ -158,6 +158,20 @@ const ADMIN = {
     const label = String(s).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     return `<span class="pill pill-${cls}">${label}</span>`;
   },
+
+  /**
+   * Resolve the tier label (Starter / Growth / Professional) from a
+   * landlord_subscriptions row. `plan` holds lifecycle state
+   * (trial/active/expired) — the tier the landlord chose lives in
+   * `selected_plan`. Falls back to `plan` for legacy rows that pre-date
+   * the split.
+   */
+  tierLabel(sub) {
+    if (!sub) return "—";
+    const tier = sub.selected_plan || (sub.plan && !["trial", "trialing", "active", "expired", "past_due", "cancelled"].includes(sub.plan) ? sub.plan : null);
+    if (!tier) return "—";
+    return tier.charAt(0).toUpperCase() + tier.slice(1);
+  },
 };
 
 window.ADMIN = ADMIN;

@@ -135,7 +135,7 @@
         <div class="stat-tile" data-scroll="cardListings"  role="button" tabindex="0"><div class="label">Listings</div><div class="value">${listings.length}</div><div class="sub">${liveListings} live</div></div>
         <div class="stat-tile" data-scroll="cardTenants"   role="button" tabindex="0"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
         <div class="stat-tile" data-scroll="cardDocuments" role="button" tabindex="0"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
-        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(sub?.plan || '—')}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
+        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(ADMIN.tierLabel(sub))}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
       `;
       // Stat tiles scroll to relevant section.
       document.querySelectorAll("[data-scroll]").forEach((tile) => {
@@ -301,7 +301,8 @@
     return `
       <table class="table">
         <tbody>
-          <tr><td><strong>Plan</strong></td><td>${ADMIN.esc(sub.plan)} · ${ADMIN.statusPill(sub.status)}</td></tr>
+          <tr><td><strong>Plan</strong></td><td>${ADMIN.esc(ADMIN.tierLabel(sub))} · ${ADMIN.statusPill(sub.status)}</td></tr>
+          <tr><td><strong>Lifecycle</strong></td><td><code>${ADMIN.esc(sub.plan ?? '—')}</code></td></tr>
           <tr><td><strong>Property limit</strong></td><td>${sub.property_limit ?? '—'}</td></tr>
           ${sub.trial_ends_at ? `<tr><td><strong>Trial ends</strong></td><td>${ADMIN.fmtDate(sub.trial_ends_at)} ${trial >= 0 ? `(${trial} days)` : '<span class="pill pill-red">Expired</span>'}</td></tr>` : ''}
           ${sub.current_period_end ? `<tr><td><strong>Renews</strong></td><td>${ADMIN.fmtDate(sub.current_period_end)}</td></tr>` : ''}
