@@ -1,8 +1,31 @@
 /* easierlet-admin — admin dashboard styles
+   Single-typeface system: Plus Jakarta Sans (matches web + iOS).
    Builds on the EasierLet brand but uses a darker, "admin-coloured" header
    so the surface is visually distinct from the public site. */
 
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus-jakarta-sans-400.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus-jakarta-sans-500.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus-jakarta-sans-600.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/fonts/plus-jakarta-sans-700.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
+
 :root {
+  --font-sans:     'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --el-ink:        #1A2E28;
   --el-ink-soft:   #4A6560;
   --el-muted:      #6B8278;
@@ -21,7 +44,7 @@
 html, body { margin: 0; padding: 0; }
 
 body {
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   background: var(--el-bg);
   color: var(--el-ink);
   -webkit-font-smoothing: antialiased;
@@ -40,7 +63,7 @@ body {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
 .admin-brand { display: flex; align-items: center; gap: 12px; font-size: 18px; }
-.admin-brand .e { font-family: 'Fraunces', serif; font-weight: 400; }
+.admin-brand .e { font-family: var(--font-sans); font-weight: 400; }
 .admin-brand .l { font-weight: 500; }
 .admin-badge {
   background: rgba(255,255,255,0.18);
@@ -70,7 +93,7 @@ body {
 .admin-main { max-width: 1320px; margin: 0 auto; padding: 24px 20px 60px; }
 .page-head { margin-bottom: 22px; }
 .page-head h1 {
-  font-family: 'Fraunces', serif; font-weight: 400;
+  font-family: var(--font-sans); font-weight: 400;
   font-size: 28px; letter-spacing: -0.4px; color: var(--el-ink); margin: 0 0 4px;
 }
 .page-head .sub { font-size: 14px; color: var(--el-muted); }
@@ -85,7 +108,7 @@ body {
   margin-bottom: 14px;
 }
 .card-title {
-  font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; color: var(--el-ink);
+  font-family: var(--font-sans); font-weight: 400; font-size: 18px; color: var(--el-ink);
 }
 .card-sub { font-size: 13px; color: var(--el-muted); margin-top: 2px; }
 
@@ -114,7 +137,7 @@ body {
   text-transform: uppercase; color: var(--el-muted); margin-bottom: 6px;
 }
 .stat-tile .value {
-  font-family: 'Fraunces', serif; font-weight: 400;
+  font-family: var(--font-sans); font-weight: 400;
   font-size: 28px; color: var(--el-ink); letter-spacing: -0.4px;
 }
 .stat-tile .sub { font-size: 12px; color: var(--el-muted); margin-top: 2px; }
@@ -196,7 +219,7 @@ body {
   width: 100%; max-width: 420px; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
 }
 .login-card h1 {
-  font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px;
+  font-family: var(--font-sans); font-weight: 400; font-size: 26px;
   color: var(--admin-dark); margin: 0 0 6px; text-align: center;
 }
 .login-card .sub { text-align: center; color: var(--el-muted); font-size: 13px; margin-bottom: 24px; }

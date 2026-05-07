@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#0A4D3C">
   <title>Settings — easierLet Admin</title>
   <meta name="robots" content="noindex,nofollow">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css">
 </head>
 <body>
@@ -69,7 +66,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=3";
+  import "/assets/admin.js?v=4";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
   const admin = await ADMIN.requireAdminSession();
@@ -154,7 +151,7 @@
           ${json.checks.map((c) => `
             <div class="stat-tile ${c.severity === 'fail' ? 'alert' : c.severity === 'warn' ? 'warn' : ''}">
               <div class="label">${ADMIN.esc(c.name)}</div>
-              <div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${c.severity === 'pass' ? '✅ Pass' : c.severity === 'warn' ? '⚠️ Warn' : '❌ Fail'}</div>
+              <div class="value" style="font-size:18px;font-family:var(--font-sans)">${c.severity === 'pass' ? '✅ Pass' : c.severity === 'warn' ? '⚠️ Warn' : '❌ Fail'}</div>
               <div class="sub">${ADMIN.esc(c.detail || '')}</div>
             </div>`).join("")}
         </div>

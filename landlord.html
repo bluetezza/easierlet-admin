@@ -7,9 +7,6 @@
   <title>Landlord — easierLet Admin</title>
   <meta name="robots" content="noindex,nofollow">
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css">
 </head>
 <body>
@@ -116,7 +113,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=3";
+  import "/assets/admin.js?v=4";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -155,7 +152,7 @@
         <div class="stat-tile" data-scroll="cardListings"  role="button" tabindex="0"><div class="label">Listings</div><div class="value">${listings.length}</div><div class="sub">${liveListings} live</div></div>
         <div class="stat-tile" data-scroll="cardTenants"   role="button" tabindex="0"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
         <div class="stat-tile" data-scroll="cardDocuments" role="button" tabindex="0"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
-        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:'DM Sans',sans-serif">${ADMIN.esc(ADMIN.tierLabel(sub))}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
+        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:var(--font-sans)">${ADMIN.esc(ADMIN.tierLabel(sub))}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
       `;
       // Stat tiles scroll to relevant section.
       document.querySelectorAll("[data-scroll]").forEach((tile) => {

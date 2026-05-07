@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#0A4D3C">
   <title>Compliance rules — easierLet Admin</title>
   <meta name="robots" content="noindex,nofollow">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/assets/admin.css">
 
   <style>
@@ -23,7 +20,7 @@
     .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start; justify-content: center; padding: 60px 20px; overflow-y: auto; }
     .modal-bg.show { display: flex; }
     .modal { background: white; border-radius: 14px; width: 100%; max-width: 600px; padding: 24px; max-height: 80vh; overflow-y: auto; }
-    .modal h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 22px; margin: 0 0 16px; }
+    .modal h2 { font-family: var(--font-sans); font-weight: 400; font-size: 22px; margin: 0 0 16px; }
     .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .modal-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 22px; }
   </style>
@@ -158,7 +155,7 @@
 </div>
 
 <script type="module">
-import "/assets/admin.js?v=3";
+import "/assets/admin.js?v=4";
 const ADMIN = window.ADMIN;
 const $ = (id) => document.getElementById(id);
 
