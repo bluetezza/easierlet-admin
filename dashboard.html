@@ -57,6 +57,34 @@
     </div>
   </div>
 
+  <div class="card" id="propertiesList">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Search properties</div>
+        <div class="card-sub">Address, postcode, or landlord name / email.</div>
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
+      <input type="search" id="propSearchInput" placeholder="Address, postcode, landlord…" />
+      <button class="btn btn-primary" id="propSearchBtn">Search</button>
+    </div>
+    <div id="propListBody" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card" id="tenantsList">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Search tenants</div>
+        <div class="card-sub">Tenant name / email, property address, or landlord.</div>
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
+      <input type="search" id="tenSearchInput" placeholder="Name, email, address, landlord…" />
+      <button class="btn btn-primary" id="tenSearchBtn">Search</button>
+    </div>
+    <div id="tenListBody" style="margin-top:14px"></div>
+  </div>
+
   <div class="card">
     <div class="card-head">
       <div>
@@ -70,7 +98,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=8";
+  import "/assets/admin.js?v=9";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -94,12 +122,12 @@
           <div class="value">${c.landlords}</div>
           <div class="sub">All accounts</div>
         </a>
-        <a href="/properties.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
+        <a href="#propertiesList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Properties (active)</div>
           <div class="value">${c.properties}</div>
           <div class="sub">Search by address</div>
         </a>
-        <a href="/tenants.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
+        <a href="#tenantsList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Tenants (active)</div>
           <div class="value">${c.tenants}</div>
           <div class="sub">Search by name or email</div>
@@ -225,6 +253,106 @@
   $("searchBtn").addEventListener("click", () => loadLandlords($("searchInput").value.trim()));
   $("searchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadLandlords($("searchInput").value.trim()); } });
 
+  // ── Properties section ───────────────────────────────────────────
+  async function loadProperties(search = "") {
+    $("propListBody").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("list_admin_properties", { search });
+      const items = data.items || [];
+      if (!items.length) {
+        $("propListBody").innerHTML = `<div class="empty">${search ? `Nothing matches "${ADMIN.esc(search)}".` : "No properties yet."}</div>`;
+        return;
+      }
+      $("propListBody").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Address</th><th>Beds / Baths</th><th>Rent</th>
+              <th>Landlord</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${items.map((p) => {
+            const ll = p.landlord || {};
+            const llName = ll.director_name || ll.contact_email || "—";
+            const llHref = `/landlord.html?id=${ADMIN.esc(p.user_id)}`;
+            const addr = [p.address_line1, p.address_line2, p.city, p.postcode].filter(Boolean).join(", ") || "—";
+            const rent = p.monthly_rent != null
+              ? `£${Number(p.monthly_rent).toLocaleString("en-GB", { maximumFractionDigits: 0 })} <small style="color:var(--el-muted)">/ mo</small>`
+              : "—";
+            return `
+              <tr>
+                <td>${ADMIN.esc(addr)}</td>
+                <td>${p.bedrooms ?? "—"} / ${p.bathrooms ?? "—"}</td>
+                <td>${rent}</td>
+                <td><a href="${llHref}">${ADMIN.esc(llName)}</a>${ll.contact_email ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(ll.contact_email)}</small>` : ""}</td>
+                <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
+                <td><a class="btn btn-secondary" href="${llHref}">Open</a></td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+        <div style="text-align:right;margin-top:8px;color:var(--el-muted);font-size:12px">${items.length} shown</div>
+      `;
+    } catch (e) {
+      $("propListBody").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  }
+  $("propSearchBtn").addEventListener("click", () => loadProperties($("propSearchInput").value.trim()));
+  $("propSearchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadProperties($("propSearchInput").value.trim()); } });
+
+  // ── Tenants section ──────────────────────────────────────────────
+  function tenantStatusPill(s) {
+    if (!s) return `<span class="pill pill-grey">—</span>`;
+    const map = {
+      active: "green", awaiting_review: "blue", referencing: "blue",
+      approved: "green", submitted: "blue",
+      archived: "grey", rejected: "red", declined: "red",
+    };
+    return `<span class="pill pill-${map[s] || 'grey'}">${ADMIN.esc(s.replace(/_/g, ' '))}</span>`;
+  }
+  async function loadTenants(search = "") {
+    $("tenListBody").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("list_admin_tenants", { search });
+      const items = data.items || [];
+      if (!items.length) {
+        $("tenListBody").innerHTML = `<div class="empty">${search ? `Nothing matches "${ADMIN.esc(search)}".` : "No tenants yet."}</div>`;
+        return;
+      }
+      $("tenListBody").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Tenant</th><th>Role</th><th>Property</th>
+              <th>Landlord</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${items.map((t) => {
+            const ll = t.landlord || {};
+            const llName = ll.director_name || ll.contact_email || "—";
+            const llHref = `/landlord.html?id=${ADMIN.esc(t.user_id)}`;
+            const prop = t.property || {};
+            const addr = [prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(", ") || "—";
+            const tenName = t.full_name || t.name || "—";
+            return `
+              <tr>
+                <td><div>${ADMIN.esc(tenName)}</div>${t.email ? `<small style="color:var(--el-muted)">${ADMIN.esc(t.email)}</small>` : ""}</td>
+                <td>${t.role ? `<code style="font-size:12px">${ADMIN.esc(t.role)}</code>` : "—"}</td>
+                <td>${ADMIN.esc(addr)}</td>
+                <td><a href="${llHref}">${ADMIN.esc(llName)}</a>${ll.contact_email ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(ll.contact_email)}</small>` : ""}</td>
+                <td>${tenantStatusPill(t.status)}</td>
+                <td><a class="btn btn-secondary" href="${llHref}">Open</a></td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+        <div style="text-align:right;margin-top:8px;color:var(--el-muted);font-size:12px">${items.length} shown</div>
+      `;
+    } catch (e) {
+      $("tenListBody").innerHTML = `<div class="alert error">${ADMIN.esc(e.message)}</div>`;
+    }
+  }
+  $("tenSearchBtn").addEventListener("click", () => loadTenants($("tenSearchInput").value.trim()));
+  $("tenSearchInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); loadTenants($("tenSearchInput").value.trim()); } });
+
   // Invite landlord modal wiring
   const invBg = document.getElementById("inviteBg");
   document.getElementById("inviteOpenBtn").addEventListener("click", () => {
@@ -256,6 +384,8 @@
 
   loadStats();
   loadLandlords();
+  loadProperties();
+  loadTenants();
 </script>
 
 </body>
