@@ -70,7 +70,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=7";
+  import "/assets/admin.js?v=8";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -94,15 +94,15 @@
           <div class="value">${c.landlords}</div>
           <div class="sub">All accounts</div>
         </a>
-        <a href="#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
+        <a href="/properties.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Properties (active)</div>
           <div class="value">${c.properties}</div>
-          <div class="sub">View landlords</div>
+          <div class="sub">Search by address</div>
         </a>
-        <a href="#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
+        <a href="/tenants.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Tenants (active)</div>
           <div class="value">${c.tenants}</div>
-          <div class="sub">View landlords</div>
+          <div class="sub">Search by name or email</div>
         </a>
         <a href="?subscription_status=active#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Subscriptions</div>

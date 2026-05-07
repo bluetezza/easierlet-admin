@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Properties — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Properties</h1>
+    <div class="sub">Every property across all landlords. Search by address, postcode, or landlord name/email.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title" id="cardTitle">All properties</div>
+        <div class="card-sub">Newest first.</div>
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
+      <input type="search" id="searchInput" placeholder="Address, postcode, landlord name or email…" autofocus />
+      <button class="btn btn-primary" id="searchBtn">Search</button>
+    </div>
+    <div id="rows" style="margin-top:14px"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=8";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+
+  async function load(search = "") {
+    $("rows").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const data = await ADMIN.api("list_admin_properties", { search });
+      const items = data.items || [];
+      $("cardTitle").textContent = search
+        ? `${items.length} match${items.length === 1 ? "" : "es"} for "${search}"`
+        : `${items.length} propert${items.length === 1 ? "y" : "ies"}`;
+      if (!items.length) {
+        $("rows").innerHTML = `<div class="empty">${search ? `Nothing matches "${ADMIN.esc(search)}".` : "No properties yet."}</div>`;
+        return;
+      }
+      $("rows").innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Address</th><th>Beds / Baths</th><th>Rent</th>
+              <th>Landlord</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody>${items.map((p) => {
+            const ll = p.landlord || {};
+            const llName = ll.director_name || ll.contact_email || "—";
+            const llHref = `/landlord.html?id=${ADMIN.esc(p.user_id)}`;
+            const addr = [p.address_line1, p.address_line2, p.city, p.postcode].filter(Boolean).join(", ") || "—";
+            const rent = p.monthly_rent != null
+              ? `£${Number(p.monthly_rent).toLocaleString("en-GB", { maximumFractionDigits: 0 })} <small style="color:var(--el-muted)">/ mo</small>`
+              : "—";
+            return `
+              <tr>
+                <td>${ADMIN.esc(addr)}</td>
+                <td>${p.bedrooms ?? "—"} / ${p.bathrooms ?? "—"}</td>
+                <td>${rent}</td>
+                <td><a href="${llHref}">${ADMIN.esc(llName)}</a>${ll.contact_email ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(ll.contact_email)}</small>` : ""}</td>
+                <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
+                <td><a class="btn btn-secondary" href="${llHref}">Open landlord</a></td>
+              </tr>`;
+          }).join("")}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load properties.");
+    }
+  }
+
+  $("searchBtn").addEventListener("click", () => load($("searchInput").value.trim()));
+  $("searchInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); load($("searchInput").value.trim()); }
+  });
+
+  // Honour ?q= for tile / nav deep-linking.
+  const q0 = new URLSearchParams(location.search).get("q") ?? "";
+  if (q0) $("searchInput").value = q0;
+  load(q0);
+</script>
+
+</body>
+</html>
