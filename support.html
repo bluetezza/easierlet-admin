@@ -94,6 +94,7 @@
           <div class="card-title" id="thSubject">—</div>
           <div class="card-sub" id="thMeta">—</div>
         </div>
+        <button class="btn btn-secondary" id="closeNoReplyBtn">Close ticket (no reply)</button>
       </div>
       <div id="messageList"></div>
       <div style="margin-top:14px;border-top:1px solid var(--el-line);padding-top:14px">
@@ -119,7 +120,7 @@
 </main>
 
 <script type="module">
-import "/assets/admin.js?v=5";
+import "/assets/admin.js?v=6";
 const ADMIN = window.ADMIN;
 const $ = (id) => document.getElementById(id);
 
@@ -204,6 +205,8 @@ async function openThread(id) {
   const llName = ll.director_name || ll.contact_email || t.user_id;
   $("thSubject").textContent = t.subject;
   $("thMeta").innerHTML = `${pill(t.status)} · ${ADMIN.esc(llName)} ${ll.contact_email ? `&lt;${ADMIN.esc(ll.contact_email)}&gt;` : ""} · plan ${ADMIN.esc(t.plan_at_open || "—")} · opened ${ADMIN.esc(fmt(t.created_at))} · category ${ADMIN.esc(t.category || "—")}`;
+  // Hide the close-without-reply button on already-closed tickets.
+  $("closeNoReplyBtn").style.display = (t.status === "closed") ? "none" : "";
 
   const msgs = res.messages || [];
   $("messageList").innerHTML = msgs.map(m => {
@@ -241,6 +244,20 @@ $("internalChk").addEventListener("change", () => {
   const internal = $("internalChk").checked;
   document.getElementById("statusRow").classList.toggle("is-internal", internal);
   document.querySelectorAll('input[name="newStatusRadio"]').forEach(r => { r.disabled = internal; });
+});
+
+$("closeNoReplyBtn").addEventListener("click", async () => {
+  if (!activeTicketId) return;
+  const reason = window.prompt("Optional note for the user (left blank, the system message just says \"Ticket closed by support\"):", "") ?? "";
+  if (reason === null) return; // user cancelled
+  const btn = $("closeNoReplyBtn"); btn.disabled = true; btn.textContent = "Closing…";
+  try {
+    await ADMIN.api("close_support_ticket", { ticket_id: activeTicketId, reason: reason.trim() });
+    await openThread(activeTicketId);
+    await loadList();
+  } catch (e) {
+    alertBox("error", e.message || "Couldn't close ticket.");
+  } finally { btn.disabled = false; btn.textContent = "Close ticket (no reply)"; }
 });
 
 $("sendReplyBtn").addEventListener("click", async () => {

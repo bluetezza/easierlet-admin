@@ -69,7 +69,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=5";
+  import "/assets/admin.js?v=6";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -82,7 +82,10 @@
 
   async function loadStats() {
     try {
-      const data = await ADMIN.api("dashboard_stats");
+      const [data, supportSummary] = await Promise.all([
+        ADMIN.api("dashboard_stats"),
+        ADMIN.api("support_summary").catch(() => ({ needs_reply: 0, total_open: 0 })),
+      ]);
       const c = data.counts;
       $("statsGrid").innerHTML = `
         <div class="stat-tile">
@@ -116,6 +119,11 @@
           <div class="label">Upcoming visits</div>
           <div class="value">${c.upcoming_visits}</div>
         </div>
+        <a href="/support.html" class="stat-tile ${supportSummary.needs_reply > 0 ? 'alert' : ''}" id="supportTile" style="text-decoration:none;display:block">
+          <div class="label">Support — needs reply</div>
+          <div class="value">${supportSummary.needs_reply}</div>
+          <div class="sub">${supportSummary.total_open} open ticket${supportSummary.total_open === 1 ? '' : 's'} total</div>
+        </a>
       `;
       $("recentActivity").innerHTML = renderAuditTable(data.recent_activity);
     } catch (e) {
