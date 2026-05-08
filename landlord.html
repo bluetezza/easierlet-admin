@@ -113,7 +113,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=9";
+  import "/assets/admin.js?v=10";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -369,7 +369,7 @@
     const fmtMoney = (n) => n != null ? `£${Math.round(Number(n)).toLocaleString("en-GB")}` : "—";
     return `
       <table class="table">
-        <thead><tr><th>Address</th><th>Beds / Baths</th><th>Rent</th><th>Deposit</th><th>Status</th><th>Listing</th><th>Created</th></tr></thead>
+        <thead><tr><th>Address</th><th>Beds / Baths</th><th>Rent</th><th>Deposit</th><th>Status</th><th>Listing</th><th>Created</th><th></th></tr></thead>
         <tbody>${props.map((p) => {
           const addr = [p.address_line1, p.address_line2, p.city, p.postcode].filter(Boolean).join(', ') || p.address || '—';
           const ll = (listingsByProp[p.id] || []).sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))[0];
@@ -385,6 +385,7 @@
             <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
             <td>${listingPill}</td>
             <td>${ADMIN.fmtDate(p.created_at)}</td>
+            <td><a class="btn btn-secondary" href="/property.html?id=${ADMIN.esc(p.id)}">Open</a></td>
           </tr>`;
         }).join("")}</tbody>
       </table>
@@ -425,7 +426,7 @@
     if (!tenants.length) return `<div class="empty">No tenants.</div>`;
     return `
       <table class="table">
-        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Role</th><th>Tenancy</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>Role</th><th>Tenancy</th><th></th></tr></thead>
         <tbody>${tenants.map((t) => `
           <tr>
             <td>${ADMIN.esc(t.full_name || t.name || '—')}</td>
@@ -433,6 +434,7 @@
             <td>${ADMIN.statusPill(t.status)}</td>
             <td>${ADMIN.esc(t.role || '—')}</td>
             <td>${t.tenancy_start ? ADMIN.fmtDate(t.tenancy_start) : '—'}${t.tenancy_end ? ` – ${ADMIN.fmtDate(t.tenancy_end)}` : ''}</td>
+            <td><a class="btn btn-secondary" href="/tenant.html?id=${ADMIN.esc(t.id)}">Open</a></td>
           </tr>`).join("")}</tbody>
       </table>
     `;

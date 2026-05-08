@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Tenant — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <a href="/dashboard.html#tenantsList" style="color:var(--el-muted);font-size:13px;text-decoration:none">← All tenants</a>
+    <h1 id="tTitle">Loading…</h1>
+    <div class="sub" id="tSub">—</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="stats-grid" id="tStats"></div>
+
+  <div class="card">
+    <div class="card-head"><div><div class="card-title">Tenant details</div></div></div>
+    <div id="tDetails"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card" id="cardTenancy">
+    <div class="card-head"><div><div class="card-title">Tenancy agreements</div></div></div>
+    <div id="tAgreements"></div>
+  </div>
+
+  <div class="card" id="cardReferences">
+    <div class="card-head"><div><div class="card-title">References</div></div></div>
+    <div id="tReferences"></div>
+  </div>
+
+  <div class="card" id="cardViewings">
+    <div class="card-head"><div><div class="card-title">Viewings</div><div class="card-sub">Matched on prospect email.</div></div></div>
+    <div id="tViewings"></div>
+  </div>
+
+  <div class="card" id="cardDocuments">
+    <div class="card-head"><div><div class="card-title">Documents</div></div></div>
+    <div id="tDocuments"></div>
+  </div>
+
+  <div class="card" id="cardSupport">
+    <div class="card-head"><div><div class="card-title">Support tickets</div><div class="card-sub">Tickets opened from this tenant's portal account.</div></div></div>
+    <div id="tSupport"></div>
+  </div>
+
+  <div class="card" id="cardActivity">
+    <div class="card-head"><div><div class="card-title">Recent activity</div><div class="card-sub">Audit-log entries where this tenant is the actor.</div></div></div>
+    <div id="tActivity"></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=10";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+
+  const tenantId = new URLSearchParams(location.search).get("id");
+  if (!tenantId) {
+    document.body.innerHTML = `<div class="empty">Missing tenant id.</div>`;
+    throw new Error("no id");
+  }
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+  function fmtMoney(v) { return v == null ? "—" : `£${Number(v).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`; }
+  function fmtBool(v) { return v === true ? "Yes" : (v === false ? "No" : "—"); }
+
+  async function load() {
+    try {
+      const data = await ADMIN.api("view_tenant", { tenant_id: tenantId });
+      const t = data.tenant || {};
+      const ll = data.landlord || {};
+      const prop = data.property || {};
+      const tenName = t.full_name || t.name || "—";
+      $("tTitle").textContent = tenName;
+
+      const propAddr = prop.id ? [prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(", ") : null;
+      const propLink = prop.id ? `<a href="/property.html?id=${ADMIN.esc(prop.id)}">${ADMIN.esc(propAddr || prop.id)}</a>` : "—";
+      $("tSub").innerHTML = `${ADMIN.statusPill(t.status)} · ${t.role ? `<code style="font-size:12px">${ADMIN.esc(t.role)}</code> · ` : ""}landlord <a href="/landlord.html?id=${ADMIN.esc(t.user_id)}">${ADMIN.esc(ll.director_name || ll.contact_email || '—')}</a> · property ${propLink}`;
+
+      $("tStats").innerHTML = `
+        <div class="stat-tile"><div class="label">Status</div><div class="value" style="font-size:18px">${ADMIN.statusPill(t.status)}</div></div>
+        <div class="stat-tile"><div class="label">Monthly rent</div><div class="value" style="font-size:22px">${fmtMoney(t.monthly_rent)}</div></div>
+        <div class="stat-tile"><div class="label">Deposit</div><div class="value" style="font-size:22px">${fmtMoney(t.deposit)}</div></div>
+        <div class="stat-tile"><div class="label">Tenancy starts</div><div class="value" style="font-size:18px">${t.tenancy_start ? ADMIN.fmtDate(t.tenancy_start) : '—'}</div></div>
+        <div class="stat-tile"><div class="label">Agreements</div><div class="value">${data.agreements.length}</div></div>
+        <div class="stat-tile"><div class="label">References</div><div class="value">${data.references.length}</div></div>
+      `;
+
+      const dob = t.date_of_birth ? ADMIN.fmtDate(t.date_of_birth) : "—";
+      $("tDetails").innerHTML = `
+        <table class="table"><tbody>
+          <tr><td><strong>Name</strong></td><td>${ADMIN.esc(tenName)}</td></tr>
+          <tr><td><strong>Email</strong></td><td>${t.email ? `<a href="mailto:${ADMIN.esc(t.email)}">${ADMIN.esc(t.email)}</a>` : "—"}</td></tr>
+          <tr><td><strong>Phone</strong></td><td>${ADMIN.esc(t.phone || "—")}</td></tr>
+          <tr><td><strong>Date of birth</strong></td><td>${dob}</td></tr>
+          <tr><td><strong>Nationality</strong></td><td>${ADMIN.esc(t.nationality || "—")}</td></tr>
+          <tr><td><strong>Right to rent</strong></td><td>${ADMIN.esc(t.right_to_rent_status || "—")} ${t.right_to_rent_checked_at ? `<small style="color:var(--el-muted)">checked ${ADMIN.fmtDate(t.right_to_rent_checked_at)}</small>` : ""}</td></tr>
+          <tr><td><strong>Application source</strong></td><td>${ADMIN.esc(t.application_source || "—")}</td></tr>
+          <tr><td><strong>Number of occupants</strong></td><td>${t.number_of_occupants ?? "—"} (${t.number_of_adults ?? "—"} adults · ${t.number_of_children ?? "—"} children)</td></tr>
+          <tr><td><strong>Pets</strong></td><td>${fmtBool(t.has_pets)}${t.pet_details ? ` — ${ADMIN.esc(t.pet_details)}` : ""}</td></tr>
+          <tr><td><strong>Smoker</strong></td><td>${fmtBool(t.is_smoker)}</td></tr>
+          <tr><td><strong>Employment</strong></td><td>${ADMIN.esc(t.employment_status || "—")}${t.employer_name ? ` · ${ADMIN.esc(t.employer_name)}` : ""}${t.job_title ? ` · ${ADMIN.esc(t.job_title)}` : ""}</td></tr>
+          <tr><td><strong>Annual income</strong></td><td>${fmtMoney(t.annual_income)}</td></tr>
+          <tr><td><strong>Adverse credit</strong></td><td>${fmtBool(t.has_adverse_credit)}${t.adverse_credit_details ? ` — ${ADMIN.esc(t.adverse_credit_details)}` : ""}</td></tr>
+          <tr><td><strong>Previously evicted</strong></td><td>${fmtBool(t.has_been_evicted)}${t.eviction_details ? ` — ${ADMIN.esc(t.eviction_details)}` : ""}</td></tr>
+          <tr><td><strong>Ranking</strong></td><td>${t.ranking_band ? ADMIN.esc(t.ranking_band) : "—"} ${t.ranking_score != null ? `(${t.ranking_score})` : ""}${t.shortlisted ? ' · <span class="pill pill-green">Shortlisted</span>' : ""}</td></tr>
+          <tr><td><strong>Created</strong></td><td>${ADMIN.fmtDateTime(t.created_at)}</td></tr>
+          <tr><td><strong>Tenancy</strong></td><td>${t.tenancy_start ? `${ADMIN.fmtDate(t.tenancy_start)} → ${t.tenancy_end ? ADMIN.fmtDate(t.tenancy_end) : 'open'}` : "—"}</td></tr>
+        </tbody></table>
+      `;
+
+      $("tAgreements").innerHTML = data.agreements.length ? `
+        <table class="table">
+          <thead><tr><th>Created</th><th>Status</th><th>Start</th><th>Rent</th><th>Deposit</th><th>Sent</th><th>Tenant signed</th><th>Landlord signed</th></tr></thead>
+          <tbody>${data.agreements.map((a) => `
+            <tr>
+              <td>${ADMIN.fmtDateTime(a.created_at)}</td>
+              <td>${ADMIN.statusPill(a.status)}</td>
+              <td>${a.start_date ? ADMIN.fmtDate(a.start_date) : "—"}</td>
+              <td>${fmtMoney(a.monthly_rent)}</td>
+              <td>${fmtMoney(a.deposit)}</td>
+              <td>${a.sent_at ? ADMIN.relTime(a.sent_at) : "—"}</td>
+              <td>${a.tenant_signed_at ? ADMIN.relTime(a.tenant_signed_at) : "—"}</td>
+              <td>${a.landlord_signed_at ? ADMIN.relTime(a.landlord_signed_at) : "—"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No tenancy agreements yet.</div>`;
+
+      $("tReferences").innerHTML = data.references.length ? `
+        <table class="table">
+          <thead><tr><th>Submitted</th><th>Form</th><th>Status</th><th>Employer</th><th>Income</th><th>Guarantor</th></tr></thead>
+          <tbody>${data.references.map((r) => `
+            <tr>
+              <td>${r.submitted_at ? ADMIN.relTime(r.submitted_at) : "—"}</td>
+              <td>${ADMIN.esc(r.form_type || "—")}</td>
+              <td>${ADMIN.statusPill(r.status)}</td>
+              <td>${ADMIN.esc(r.employer_name || "—")}${r.job_title ? ` · ${ADMIN.esc(r.job_title)}` : ""}</td>
+              <td>${fmtMoney(r.annual_income)}</td>
+              <td>${r.has_guarantor ? `${ADMIN.esc(r.guarantor_name || "Yes")}` : "No"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No referencing forms.</div>`;
+
+      $("tViewings").innerHTML = data.viewings.length ? `
+        <table class="table">
+          <thead><tr><th>Created</th><th>Status</th><th>Proposed</th><th>Confirmed</th><th>Message</th></tr></thead>
+          <tbody>${data.viewings.map((v) => `
+            <tr>
+              <td>${ADMIN.relTime(v.created_at)}</td>
+              <td>${ADMIN.statusPill(v.status)}</td>
+              <td>${v.proposed_datetime ? ADMIN.fmtDateTime(v.proposed_datetime) : "—"}</td>
+              <td>${v.confirmed_datetime ? ADMIN.fmtDateTime(v.confirmed_datetime) : "—"}</td>
+              <td><small>${ADMIN.esc(v.message || "")}</small></td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No viewings.</div>`;
+
+      $("tDocuments").innerHTML = data.documents.length ? `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Category</th><th>Type</th><th>Created</th></tr></thead>
+          <tbody>${data.documents.map((d) => `
+            <tr>
+              <td>${ADMIN.esc(d.name || "—")}</td>
+              <td>${ADMIN.esc(d.category || "—")}</td>
+              <td>${ADMIN.esc(d.type || "—")}</td>
+              <td>${ADMIN.relTime(d.created_at)}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No documents tagged to this tenant.</div>`;
+
+      $("tSupport").innerHTML = data.support_tickets.length ? `
+        <table class="table">
+          <thead><tr><th>Subject</th><th>Status</th><th>Opened</th><th>Last admin reply</th><th>Last user reply</th></tr></thead>
+          <tbody>${data.support_tickets.map((s) => `
+            <tr>
+              <td><a href="/support.html?id=${ADMIN.esc(s.id)}">${ADMIN.esc(s.subject || "—")}</a></td>
+              <td>${ADMIN.statusPill(s.status)}</td>
+              <td>${ADMIN.relTime(s.created_at)}</td>
+              <td>${s.last_admin_message_at ? ADMIN.relTime(s.last_admin_message_at) : "—"}</td>
+              <td>${s.last_user_message_at ? ADMIN.relTime(s.last_user_message_at) : "—"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No support tickets.</div>`;
+
+      $("tActivity").innerHTML = data.audit_log.length ? `
+        <table class="table">
+          <thead><tr><th>When</th><th>Action</th><th>Resource</th><th>Metadata</th></tr></thead>
+          <tbody>${data.audit_log.map((e) => `
+            <tr>
+              <td>${ADMIN.relTime(e.created_at)}</td>
+              <td><code style="font-size:12px">${ADMIN.esc(e.action)}</code></td>
+              <td>${ADMIN.esc(e.resource_type || "—")}</td>
+              <td>${e.metadata && Object.keys(e.metadata).length ? `<small>${ADMIN.esc(JSON.stringify(e.metadata))}</small>` : "—"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No portal activity recorded yet.</div>`;
+
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load tenant.");
+    }
+  }
+  load();
+</script>
+
+</body>
+</html>

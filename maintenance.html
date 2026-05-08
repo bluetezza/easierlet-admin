@@ -32,7 +32,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=9";
+  import "/assets/admin.js?v=10";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -64,7 +64,7 @@
           <thead>
             <tr>
               <th>Opened</th><th>Landlord</th><th>Property</th><th>Title</th>
-              <th>Trade</th><th>Priority</th><th>Status</th><th>Scheduled</th>
+              <th>Trade</th><th>Priority</th><th>Status</th><th>Scheduled</th><th></th>
             </tr>
           </thead>
           <tbody>${items.map((m) => {
@@ -73,16 +73,18 @@
             const prop = m.property || {};
             const addr = [prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(", ") || "—";
             const llHref = `/landlord.html?id=${ADMIN.esc(m.user_id)}`;
+            const propHref = m.property_id ? `/property.html?id=${ADMIN.esc(m.property_id)}` : null;
             return `
               <tr>
                 <td>${ADMIN.relTime(m.created_at)}</td>
                 <td><a href="${llHref}">${ADMIN.esc(llName)}</a></td>
-                <td>${ADMIN.esc(addr)}</td>
+                <td>${propHref ? `<a href="${propHref}">${ADMIN.esc(addr)}</a>` : ADMIN.esc(addr)}</td>
                 <td>${ADMIN.esc(m.title || "—")}</td>
                 <td>${m.trade_type ? `<code style="font-size:12px">${ADMIN.esc(m.trade_type)}</code>` : '<span style="color:var(--el-muted)">untriaged</span>'}</td>
                 <td>${m.priority ? ADMIN.esc(m.priority) : "—"}</td>
                 <td>${statusPill(m.status)}</td>
                 <td>${m.scheduled_date ? ADMIN.fmtDate(m.scheduled_date) : "—"}</td>
+                <td>${propHref ? `<a class="btn btn-secondary" href="${propHref}">Open</a>` : ""}</td>
               </tr>`;
           }).join("")}</tbody>
         </table>

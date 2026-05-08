@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <title>Property — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <a href="/dashboard.html#propertiesList" style="color:var(--el-muted);font-size:13px;text-decoration:none">← All properties</a>
+    <h1 id="pTitle">Loading…</h1>
+    <div class="sub" id="pSub">—</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="stats-grid" id="pStats"></div>
+
+  <div class="card">
+    <div class="card-head"><div><div class="card-title">Property details</div></div></div>
+    <div id="pDetails"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card" id="cardTenants">
+    <div class="card-head"><div><div class="card-title">Tenants</div><div class="card-sub">Past + present at this address.</div></div></div>
+    <div id="pTenants"></div>
+  </div>
+
+  <div class="card" id="cardListings">
+    <div class="card-head"><div><div class="card-title">Listings</div></div></div>
+    <div id="pListings"></div>
+  </div>
+
+  <div class="card" id="cardCompliance">
+    <div class="card-head"><div><div class="card-title">Compliance</div><div class="card-sub">Certificates and statuses for this property.</div></div></div>
+    <div id="pCompliance"></div>
+  </div>
+
+  <div class="card" id="cardMaintenance">
+    <div class="card-head"><div><div class="card-title">Maintenance</div></div></div>
+    <div id="pMaintenance"></div>
+  </div>
+
+  <div class="card" id="cardVisits">
+    <div class="card-head"><div><div class="card-title">Visits</div></div></div>
+    <div id="pVisits"></div>
+  </div>
+
+  <div class="card" id="cardInventories">
+    <div class="card-head"><div><div class="card-title">Inventories</div></div></div>
+    <div id="pInventories"></div>
+  </div>
+
+  <div class="card" id="cardDocuments">
+    <div class="card-head"><div><div class="card-title">Documents</div></div></div>
+    <div id="pDocuments"></div>
+  </div>
+
+  <div class="card" id="cardTransactions">
+    <div class="card-head"><div><div class="card-title">Transactions</div><div class="card-sub">Most recent 50.</div></div></div>
+    <div id="pTransactions"></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=10";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("dashboard", admin);
+
+  const propertyId = new URLSearchParams(location.search).get("id");
+  if (!propertyId) {
+    document.body.innerHTML = `<div class="empty">Missing property id.</div>`;
+    throw new Error("no id");
+  }
+
+  function alertBox(kind, msg) { const a = $("alertBox"); a.className = `alert ${kind}`; a.textContent = msg; }
+  function fmtMoney(v) { return v == null ? "—" : `£${Number(v).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`; }
+
+  async function load() {
+    try {
+      const data = await ADMIN.api("view_property", { property_id: propertyId });
+      const p = data.property || {};
+      const ll = data.landlord || {};
+      const addr = [p.address_line1, p.address_line2, p.city, p.postcode].filter(Boolean).join(", ") || "—";
+      $("pTitle").textContent = addr;
+      $("pSub").innerHTML = `${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'} · landlord <a href="/landlord.html?id=${ADMIN.esc(p.user_id)}">${ADMIN.esc(ll.director_name || ll.contact_email || '—')}</a>`;
+
+      $("pStats").innerHTML = `
+        <div class="stat-tile"><div class="label">Beds / Baths</div><div class="value">${p.bedrooms ?? "—"} / ${p.bathrooms ?? "—"}</div></div>
+        <div class="stat-tile"><div class="label">Monthly rent</div><div class="value" style="font-size:22px">${fmtMoney(p.monthly_rent)}</div></div>
+        <div class="stat-tile"><div class="label">Deposit</div><div class="value" style="font-size:22px">${fmtMoney(p.deposit)}</div></div>
+        <div class="stat-tile"><div class="label">Tenants</div><div class="value">${data.tenants.length}</div></div>
+        <div class="stat-tile"><div class="label">Listings</div><div class="value">${data.listings.length}</div></div>
+        <div class="stat-tile"><div class="label">Maintenance</div><div class="value">${data.maintenance.length}</div></div>
+      `;
+
+      $("pDetails").innerHTML = `
+        <table class="table"><tbody>
+          <tr><td><strong>Address</strong></td><td>${ADMIN.esc(addr)}</td></tr>
+          <tr><td><strong>Bedrooms / Bathrooms</strong></td><td>${p.bedrooms ?? "—"} / ${p.bathrooms ?? "—"}</td></tr>
+          <tr><td><strong>Property type</strong></td><td>${ADMIN.esc(p.property_type || "—")}</td></tr>
+          <tr><td><strong>Furnishing</strong></td><td>${ADMIN.esc(p.furnished_status || "—")}</td></tr>
+          <tr><td><strong>Parking</strong></td><td>${ADMIN.esc(p.parking || "—")}</td></tr>
+          <tr><td><strong>Garden</strong></td><td>${ADMIN.esc(p.garden || "—")}</td></tr>
+          <tr><td><strong>Pets allowed</strong></td><td>${p.pets_allowed === true ? "Yes" : (p.pets_allowed === false ? "No" : "—")}</td></tr>
+          <tr><td><strong>EPC rating</strong></td><td>${ADMIN.esc(p.epc_rating || "—")}</td></tr>
+          <tr><td><strong>Monthly rent</strong></td><td>${fmtMoney(p.monthly_rent)}</td></tr>
+          <tr><td><strong>Deposit</strong></td><td>${fmtMoney(p.deposit)}</td></tr>
+          <tr><td><strong>Created</strong></td><td>${ADMIN.fmtDateTime(p.created_at)}</td></tr>
+        </tbody></table>
+      `;
+
+      $("pTenants").innerHTML = data.tenants.length ? `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Role</th><th>Email</th><th>Status</th><th>Tenancy</th><th></th></tr></thead>
+          <tbody>${data.tenants.map((t) => `
+            <tr>
+              <td>${ADMIN.esc(t.full_name || t.name || "—")}</td>
+              <td>${t.role ? `<code style="font-size:12px">${ADMIN.esc(t.role)}</code>` : "—"}</td>
+              <td>${t.email ? `<a href="mailto:${ADMIN.esc(t.email)}">${ADMIN.esc(t.email)}</a>` : "—"}</td>
+              <td>${ADMIN.statusPill(t.status)}</td>
+              <td>${t.tenancy_start ? `${ADMIN.fmtDate(t.tenancy_start)} → ${t.tenancy_end ? ADMIN.fmtDate(t.tenancy_end) : 'open'}` : "—"}</td>
+              <td><a class="btn btn-secondary" href="/tenant.html?id=${ADMIN.esc(t.id)}">Open</a></td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No tenants linked to this property.</div>`;
+
+      $("pListings").innerHTML = data.listings.length ? `
+        <table class="table">
+          <thead><tr><th>Headline</th><th>Status</th><th>Rent</th><th>Available</th><th>Views</th><th>Leads</th></tr></thead>
+          <tbody>${data.listings.map((l) => `
+            <tr>
+              <td>${ADMIN.esc(l.headline || "—")}</td>
+              <td>${ADMIN.statusPill(l.status)}</td>
+              <td>${fmtMoney(l.advertised_rent)}</td>
+              <td>${l.available_from ? ADMIN.fmtDate(l.available_from) : "—"}</td>
+              <td>${l.view_count ?? 0}</td>
+              <td>${l.lead_count ?? 0}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No listings.</div>`;
+
+      $("pCompliance").innerHTML = data.compliance.length ? `
+        <table class="table">
+          <thead><tr><th>Type</th><th>Status</th><th>Last completed</th><th>Next due</th><th>Notes</th></tr></thead>
+          <tbody>${data.compliance.map((c) => `
+            <tr>
+              <td>${ADMIN.esc(c.requirement_code || c.type || "—")}</td>
+              <td>${ADMIN.statusPill(c.status || "—")}</td>
+              <td>${c.last_completed_date ? ADMIN.fmtDate(c.last_completed_date) : "—"}</td>
+              <td>${c.next_due_date ? ADMIN.fmtDate(c.next_due_date) : "—"}</td>
+              <td>${ADMIN.esc(c.notes || "")}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No compliance records yet.</div>`;
+
+      $("pMaintenance").innerHTML = data.maintenance.length ? `
+        <table class="table">
+          <thead><tr><th>Opened</th><th>Title</th><th>Trade</th><th>Priority</th><th>Status</th><th>Scheduled</th></tr></thead>
+          <tbody>${data.maintenance.map((m) => `
+            <tr>
+              <td>${ADMIN.relTime(m.created_at)}</td>
+              <td>${ADMIN.esc(m.title || "—")}</td>
+              <td>${m.trade_type ? `<code style="font-size:12px">${ADMIN.esc(m.trade_type)}</code>` : "—"}</td>
+              <td>${ADMIN.esc(m.priority || "—")}</td>
+              <td>${ADMIN.statusPill(m.status)}</td>
+              <td>${m.scheduled_date ? ADMIN.fmtDate(m.scheduled_date) : "—"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No maintenance requests.</div>`;
+
+      $("pVisits").innerHTML = data.visits.length ? `
+        <table class="table">
+          <thead><tr><th>Date</th><th>Type</th><th>Title</th><th>Contractor</th><th>Status</th></tr></thead>
+          <tbody>${data.visits.map((v) => `
+            <tr>
+              <td>${ADMIN.fmtDate(v.scheduled_date)}</td>
+              <td><code style="font-size:12px">${ADMIN.esc(v.visit_type || "—")}</code></td>
+              <td>${ADMIN.esc(v.title || "—")}</td>
+              <td>${ADMIN.esc(v.contractor_name || "—")}</td>
+              <td>${ADMIN.statusPill(v.status)}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No visits scheduled.</div>`;
+
+      $("pInventories").innerHTML = data.inventories.length ? `
+        <table class="table">
+          <thead><tr><th>Created</th><th>Version</th><th>Status</th><th>Finalised</th></tr></thead>
+          <tbody>${data.inventories.map((i) => `
+            <tr>
+              <td>${ADMIN.fmtDateTime(i.created_at)}</td>
+              <td>v${ADMIN.esc(String(i.version ?? "—"))}</td>
+              <td>${ADMIN.statusPill(i.status)}</td>
+              <td>${i.finalised_at ? ADMIN.fmtDateTime(i.finalised_at) : "—"}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No inventories.</div>`;
+
+      $("pDocuments").innerHTML = data.documents.length ? `
+        <table class="table">
+          <thead><tr><th>Name</th><th>Category</th><th>Type</th><th>Expiry</th><th>Created</th></tr></thead>
+          <tbody>${data.documents.map((d) => `
+            <tr>
+              <td>${ADMIN.esc(d.name || "—")}</td>
+              <td>${ADMIN.esc(d.category || "—")}</td>
+              <td>${ADMIN.esc(d.type || "—")}</td>
+              <td>${d.expiry_date ? ADMIN.fmtDate(d.expiry_date) : "—"}</td>
+              <td>${ADMIN.relTime(d.created_at)}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No documents tagged with this property.</div>`;
+
+      $("pTransactions").innerHTML = data.transactions.length ? `
+        <table class="table">
+          <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Amount</th><th>Note</th></tr></thead>
+          <tbody>${data.transactions.map((t) => `
+            <tr>
+              <td>${ADMIN.fmtDate(t.date)}</td>
+              <td>${ADMIN.esc(t.type || "—")}</td>
+              <td>${ADMIN.esc(t.category || "—")}</td>
+              <td style="text-align:right">${fmtMoney(t.amount)}</td>
+              <td>${ADMIN.esc(t.note || "")}</td>
+            </tr>`).join("")}</tbody>
+        </table>
+      ` : `<div class="empty">No transactions tied to this property.</div>`;
+
+    } catch (e) {
+      alertBox("error", e.message || "Failed to load property.");
+    }
+  }
+  load();
+</script>
+
+</body>
+</html>

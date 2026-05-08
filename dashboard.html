@@ -98,7 +98,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=9";
+  import "/assets/admin.js?v=10";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -286,7 +286,7 @@
                 <td>${rent}</td>
                 <td><a href="${llHref}">${ADMIN.esc(llName)}</a>${ll.contact_email ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(ll.contact_email)}</small>` : ""}</td>
                 <td>${p.archived ? '<span class="pill pill-grey">Archived</span>' : '<span class="pill pill-green">Active</span>'}</td>
-                <td><a class="btn btn-secondary" href="${llHref}">Open</a></td>
+                <td><a class="btn btn-secondary" href="/property.html?id=${ADMIN.esc(p.id)}">Open</a></td>
               </tr>`;
           }).join("")}</tbody>
         </table>
@@ -340,7 +340,7 @@
                 <td>${ADMIN.esc(addr)}</td>
                 <td><a href="${llHref}">${ADMIN.esc(llName)}</a>${ll.contact_email ? `<br><small style="color:var(--el-muted)">${ADMIN.esc(ll.contact_email)}</small>` : ""}</td>
                 <td>${tenantStatusPill(t.status)}</td>
-                <td><a class="btn btn-secondary" href="${llHref}">Open</a></td>
+                <td><a class="btn btn-secondary" href="/tenant.html?id=${ADMIN.esc(t.id)}">Open</a></td>
               </tr>`;
           }).join("")}</tbody>
         </table>

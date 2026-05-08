@@ -32,7 +32,7 @@
 </main>
 
 <script type="module">
-  import "/assets/admin.js?v=9";
+  import "/assets/admin.js?v=10";
   const ADMIN = window.ADMIN;
   const $ = (id) => document.getElementById(id);
 
@@ -72,7 +72,7 @@
           <thead>
             <tr>
               <th>When</th><th>Type</th><th>Landlord</th><th>Property</th>
-              <th>Title</th><th>Contractor</th><th>Status</th>
+              <th>Title</th><th>Contractor</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>${items.map((v) => {
@@ -81,6 +81,7 @@
             const prop = v.property || {};
             const addr = [prop.address_line1, prop.city, prop.postcode].filter(Boolean).join(", ") || "—";
             const llHref = `/landlord.html?id=${ADMIN.esc(v.user_id)}`;
+            const propHref = v.property_id ? `/property.html?id=${ADMIN.esc(v.property_id)}` : null;
             const time = fmtTimeRange(v.scheduled_time_from, v.scheduled_time_to);
             return `
               <tr>
@@ -90,10 +91,11 @@
                 </td>
                 <td><code style="font-size:12px">${ADMIN.esc(v.visit_type || "—")}</code></td>
                 <td><a href="${llHref}">${ADMIN.esc(llName)}</a></td>
-                <td>${ADMIN.esc(addr)}</td>
+                <td>${propHref ? `<a href="${propHref}">${ADMIN.esc(addr)}</a>` : ADMIN.esc(addr)}</td>
                 <td>${ADMIN.esc(v.title || "—")}</td>
                 <td>${v.contractor_name ? ADMIN.esc(v.contractor_name) : "—"}</td>
                 <td>${statusPill(v.status)}</td>
+                <td>${propHref ? `<a class="btn btn-secondary" href="${propHref}">Open</a>` : ""}</td>
               </tr>`;
           }).join("")}</tbody>
         </table>
