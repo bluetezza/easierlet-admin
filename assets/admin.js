@@ -124,10 +124,11 @@ const ADMIN = {
     const html = `
       <div class="admin-header">
         <div class="admin-header-inner">
-          <div class="admin-brand">
-            <span><span class="e">easier</span><span class="l">Let</span></span>
+          <a href="/dashboard.html" class="admin-brand" style="display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:inherit">
+            <img src="/brand/easierlet-icon-reverse.svg" alt="" style="width:32px;height:32px;display:block">
+            <span style="color:#fff;font-size:16px;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">easierLet</span>
             <span class="admin-badge">ADMIN</span>
-          </div>
+          </a>
           <nav class="admin-nav">
             ${nav.map((n) => `<a href="${n.href}" class="${n.id === active ? "active" : ""}">${n.label}</a>`).join("")}
           </nav>
