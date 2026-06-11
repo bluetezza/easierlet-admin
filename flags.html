@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Feature flags — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+  <style>
+    table.flag-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.flag-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--el-muted); padding: 8px 10px; border-bottom: 1px solid var(--el-line-soft); }
+    table.flag-table td { padding: 11px 10px; border-bottom: 1px solid var(--el-line-soft); vertical-align: top; }
+    .flag-key { font-family: ui-monospace, monospace; font-size: 12.5px; font-weight: 600; }
+    .flag-desc { font-size: 12px; color: var(--el-muted); margin-top: 2px; }
+    .pct-wrap { display: flex; align-items: center; gap: 8px; }
+    .pct-wrap input[type=range] { width: 110px; }
+    .pct-val { font-size: 12.5px; min-width: 64px; color: var(--el-ink-soft); }
+    .beta-input { width: 100%; font-size: 12px; font-family: ui-monospace, monospace; padding: 6px 8px; border: 1px solid var(--el-line-soft); border-radius: 6px; }
+    .switch { position: relative; display: inline-block; width: 40px; height: 22px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider-bg { position: absolute; cursor: pointer; inset: 0; background: #C9D4CE; border-radius: 22px; transition: .15s; }
+    .slider-bg:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+    .switch input:checked + .slider-bg { background: #0A4D3C; }
+    .switch input:checked + .slider-bg:before { transform: translateX(18px); }
+    .kill-card { border: 1px solid #F0B9B3; background: #FDF3F2; border-radius: 12px; padding: 16px 18px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .btn-danger { background: #B3261E; color: #fff; border: none; border-radius: 8px; padding: 10px 18px; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+    .btn-danger:hover { background: #921D17; }
+  </style>
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>Feature flags</h1>
+    <div class="sub">Every new feature ships dark. Rollout path: beta users → percentage → 100%. Changes take effect within seconds (clients cache per session).</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="kill-card">
+    <div>
+      <div style="font-weight:600;color:#B3261E">Emergency kill switch</div>
+      <div style="font-size:12.5px;color:var(--el-ink-soft)">Instantly disables all AI features (maintenance, listing, reports, onboarding) for every user. Helper bubbles and chat UI flags are left untouched.</div>
+    </div>
+    <button class="btn-danger" id="killBtn">Disable All AI Features</button>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">All flags</div>
+        <div class="card-sub">Toggle = master switch. Rollout 0% = beta list only. Beta users: comma-separated user UUIDs.</div>
+      </div>
+      <button class="btn btn-secondary" id="reloadBtn">Reload</button>
+    </div>
+    <div id="flagsHost"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=11";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("flags", admin);
+
+  function flash(kind, msg) {
+    const box = $("alertBox");
+    box.className = `alert alert-${kind} show`;
+    box.textContent = msg;
+    setTimeout(() => box.classList.remove("show"), 4000);
+  }
+
+  let flags = [];
+
+  async function load() {
+    $("flagsHost").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const res = await ADMIN.api("get_flags");
+      flags = res.flags ?? [];
+      render();
+    } catch (e) {
+      $("flagsHost").innerHTML = `<p style="color:#B3261E;font-size:14px">${ADMIN.esc(e.message)}</p>`;
+    }
+  }
+
+  function render() {
+    $("flagsHost").innerHTML = `
+      <table class="flag-table">
+        <thead><tr><th>Flag</th><th>Enabled</th><th>Rollout</th><th>Beta users (UUIDs)</th><th></th></tr></thead>
+        <tbody>
+          ${flags.map((f, i) => `
+            <tr>
+              <td style="min-width:200px">
+                <div class="flag-key">${ADMIN.esc(f.key)}</div>
+                <div class="flag-desc">${ADMIN.esc(f.description ?? "")}</div>
+              </td>
+              <td>
+                <label class="switch">
+                  <input type="checkbox" data-toggle="${i}" ${f.enabled ? "checked" : ""}>
+                  <span class="slider-bg"></span>
+                </label>
+              </td>
+              <td>
+                <div class="pct-wrap">
+                  <input type="range" min="0" max="100" step="5" value="${f.rollout_pct ?? 0}" data-pct="${i}">
+                  <span class="pct-val" data-pctval="${i}">${pctLabel(f.rollout_pct ?? 0)}</span>
+                </div>
+              </td>
+              <td style="min-width:220px">
+                <input class="beta-input" data-beta="${i}" value="${(f.enabled_for ?? []).join(", ")}" placeholder="uuid, uuid, …">
+              </td>
+              <td><button class="btn btn-secondary" data-save="${i}" style="font-size:12px;padding:6px 12px">Save</button></td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+
+    document.querySelectorAll("[data-pct]").forEach((el) =>
+      el.addEventListener("input", () => {
+        document.querySelector(`[data-pctval="${el.dataset.pct}"]`).textContent = pctLabel(Number(el.value));
+      }));
+
+    document.querySelectorAll("[data-toggle]").forEach((el) =>
+      el.addEventListener("change", () => saveFlag(Number(el.dataset.toggle))));
+
+    document.querySelectorAll("[data-save]").forEach((el) =>
+      el.addEventListener("click", () => saveFlag(Number(el.dataset.save))));
+  }
+
+  function pctLabel(pct) {
+    if (pct <= 0) return "beta only";
+    if (pct >= 100) return "everyone";
+    return `${pct}% of users`;
+  }
+
+  async function saveFlag(i) {
+    const f = flags[i];
+    const enabled = document.querySelector(`[data-toggle="${i}"]`).checked;
+    const rollout_pct = Number(document.querySelector(`[data-pct="${i}"]`).value);
+    const betaRaw = document.querySelector(`[data-beta="${i}"]`).value.trim();
+    const enabled_for = betaRaw ? betaRaw.split(",").map((x) => x.trim()).filter(Boolean) : [];
+    try {
+      await ADMIN.api("update_flag", { key: f.key, enabled, rollout_pct, enabled_for });
+      flash("success", `${f.key} saved.`);
+      await load();
+    } catch (e) {
+      flash("error", e.message);
+      await load();
+    }
+  }
+
+  $("killBtn").addEventListener("click", async () => {
+    if (!confirm("This will instantly disable all AI features for all users. Are you sure?")) return;
+    const reason = prompt("Reason (kept in the audit log):") ?? "";
+    try {
+      await ADMIN.api("disable_all_ai", { reason });
+      flash("success", "All AI features disabled.");
+      await load();
+    } catch (e) {
+      flash("error", e.message);
+    }
+  });
+
+  $("reloadBtn").addEventListener("click", load);
+  await load();
+</script>
+</body>
+</html>

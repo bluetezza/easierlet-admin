@@ -120,6 +120,7 @@ const ADMIN = {
       { href: "/compliance.html", id: "compliance", label: "Compliance" },
       { href: "/support.html",    id: "support",    label: "Support"    },
       { href: "/ai.html",         id: "ai",         label: "AI"         },
+      { href: "/flags.html",      id: "flags",      label: "Flags"      },
       { href: "/settings.html",   id: "settings",   label: "Settings"   },
     ];
     const html = `
