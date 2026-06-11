@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A4D3C">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>AI — easierLet Admin</title>
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="stylesheet" href="/assets/admin.css">
+  <style>
+    .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .stat { background: #fff; border: 1px solid var(--el-line-soft, #E0E8E4); border-radius: 12px; padding: 14px 16px; }
+    .stat .v { font-size: 22px; font-weight: 600; color: var(--el-ink, #1A2E28); }
+    .stat .l { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--el-muted, #6B8278); margin-top: 2px; }
+    table.ai-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    table.ai-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--el-muted); padding: 8px 10px; border-bottom: 1px solid var(--el-line-soft); }
+    table.ai-table td { padding: 9px 10px; border-bottom: 1px solid var(--el-line-soft); }
+    .pill-warn { background: #FFF3E6; color: #8A5A00; border-radius: 10px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+    .pill-bad { background: #FDE8E8; color: #B3261E; border-radius: 10px; padding: 2px 9px; font-size: 11px; font-weight: 600; }
+    .insight { font-size: 14px; line-height: 1.65; color: var(--el-ink-soft); }
+    .insight h4 { font-size: 13px; margin: 14px 0 6px; color: var(--el-ink); }
+    .insight ul { margin: 0 0 8px; padding-left: 20px; }
+  </style>
+</head>
+<body>
+
+<div id="admin-header"></div>
+
+<main class="admin-main">
+  <div class="page-head">
+    <h1>AI usage &amp; platform insight</h1>
+    <div class="sub">Per-landlord AI budgets, suspension management, terms versions, and platform-level AI reporting.</div>
+  </div>
+
+  <div class="alert" id="alertBox"></div>
+
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Per-landlord AI usage — current month</div>
+        <div class="card-sub">Default cap is $2.00/month. Suspended landlords resume automatically on the 1st.</div>
+      </div>
+      <button class="btn btn-secondary" id="reloadBtn">Reload</button>
+    </div>
+    <div id="usageHost"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Terms of Service management</div>
+        <div class="card-sub">Bumping the version forces every user to re-accept on their next sign-in.</div>
+      </div>
+    </div>
+    <div id="termsHost"><div class="spinner"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Platform insight</div>
+        <div class="card-sub">Admin-only AI report over aggregated, non-PII platform metrics. Not billed to any landlord.</div>
+      </div>
+      <button class="btn" id="insightBtn">Generate Platform Insight</button>
+    </div>
+    <div id="insightHost"><div class="spinner"></div></div>
+  </div>
+</main>
+
+<script type="module">
+  import "/assets/admin.js?v=11";
+  const ADMIN = window.ADMIN;
+  const $ = (id) => document.getElementById(id);
+  const admin = await ADMIN.requireAdminSession();
+  if (!admin) throw new Error("redirecting");
+  ADMIN.mountHeader("ai", admin);
+
+  function flash(kind, msg) {
+    const box = $("alertBox");
+    box.className = `alert alert-${kind} show`;
+    box.textContent = msg;
+    setTimeout(() => box.classList.remove("show"), 4000);
+  }
+  const money = (n) => `$${Number(n ?? 0).toFixed(2)}`;
+
+  // ── AI usage ──────────────────────────────────────────────────────────
+  async function loadUsage() {
+    $("usageHost").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const res = await ADMIN.api("get_ai_stats");
+      $("statRow").innerHTML = `
+        <div class="stat"><div class="v">${money(res.total_cost_usd)}</div><div class="l">AI spend this month</div></div>
+        <div class="stat"><div class="v">${res.landlords.length}</div><div class="l">Landlords using AI</div></div>
+        <div class="stat"><div class="v">${res.near_cap.length}</div><div class="l">At &gt;80% of cap</div></div>
+        <div class="stat"><div class="v">${res.suspended.length}</div><div class="l">Suspended</div></div>`;
+
+      if (!res.landlords.length) {
+        $("usageHost").innerHTML = `<p style="font-size:14px;color:var(--el-muted)">No AI usage recorded this month yet.</p>`;
+        return;
+      }
+      $("usageHost").innerHTML = `
+        <table class="ai-table">
+          <thead><tr><th>Landlord</th><th>Tokens in/out</th><th>Spend</th><th>Cap</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${res.landlords.map((r) => `
+              <tr>
+                <td>${ADMIN.esc(r.name)}</td>
+                <td>${(r.tokens_in ?? 0).toLocaleString()} / ${(r.tokens_out ?? 0).toLocaleString()}</td>
+                <td>${money(r.estimated_cost_usd)}</td>
+                <td>${money(r.hard_cap_usd)}</td>
+                <td>${r.is_suspended ? '<span class="pill-bad">SUSPENDED</span>' : (Number(r.estimated_cost_usd) >= 0.8 * Number(r.hard_cap_usd) ? '<span class="pill-warn">NEAR CAP</span>' : '—')}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-secondary" data-cap="${r.user_id}" data-name="${ADMIN.esc(r.name)}" style="font-size:12px;padding:5px 10px">Extend cap</button>
+                  ${r.is_suspended ? `<button class="btn" data-resume="${r.user_id}" style="font-size:12px;padding:5px 10px">Resume AI</button>` : ""}
+                </td>
+              </tr>`).join("")}
+          </tbody>
+        </table>`;
+
+      document.querySelectorAll("[data-cap]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          const v = prompt(`Set hard cap for ${btn.dataset.name} (USD/month):`, "5.00");
+          if (v == null) return;
+          const cap = Number(v);
+          if (!Number.isFinite(cap) || cap < 0) return flash("error", "Enter a valid amount.");
+          if (!confirm(`Set hard cap for ${btn.dataset.name} to $${cap.toFixed(2)}/month?`)) return;
+          try {
+            await ADMIN.api("update_ai_cap", { user_id: btn.dataset.cap, new_cap_usd: cap });
+            flash("success", "Cap updated.");
+            loadUsage();
+          } catch (e) { flash("error", e.message); }
+        }));
+      document.querySelectorAll("[data-resume]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          try {
+            await ADMIN.api("reset_ai_suspension", { user_id: btn.dataset.resume });
+            flash("success", "AI resumed for this landlord.");
+            loadUsage();
+          } catch (e) { flash("error", e.message); }
+        }));
+    } catch (e) {
+      $("usageHost").innerHTML = `<p style="color:var(--el-danger,#B3261E);font-size:14px">${ADMIN.esc(e.message)}</p>`;
+    }
+  }
+
+  // ── Terms management ─────────────────────────────────────────────────
+  async function loadTerms() {
+    $("termsHost").innerHTML = `<div class="spinner"></div>`;
+    try {
+      const res = await ADMIN.api("get_terms_stats");
+      const c = res.config ?? {};
+      $("termsHost").innerHTML = `
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">
+          <div><div style="font-size:12px;color:var(--el-muted)">Service terms</div>
+            <div style="font-size:18px;font-weight:600">${ADMIN.esc(c.terms_version ?? "—")}</div>
+            <button class="btn btn-secondary" id="bumpService" style="font-size:12px;margin-top:6px">Bump version</button></div>
+          <div><div style="font-size:12px;color:var(--el-muted)">Website terms</div>
+            <div style="font-size:18px;font-weight:600">${ADMIN.esc(c.website_terms_version ?? "—")}</div>
+            <button class="btn btn-secondary" id="bumpWebsite" style="font-size:12px;margin-top:6px">Bump version</button></div>
+          <div><div style="font-size:12px;color:var(--el-muted)">Accepted current version</div>
+            <div style="font-size:18px;font-weight:600">${res.accepted_current} / ${res.total_users}</div></div>
+        </div>
+        ${res.pending_users.length ? `
+          <div style="font-size:12px;color:var(--el-muted);margin-bottom:6px">Not yet on the current version:</div>
+          <div style="font-size:13px;color:var(--el-ink-soft)">${res.pending_users.map((u) => ADMIN.esc(u.full_name || u.id)).join(", ")}</div>` : ""}`;
+
+      const bump = (type) => async () => {
+        const v = prompt(`New ${type} terms version (e.g. v1.1):`);
+        if (!v) return;
+        if (!confirm(`Bump ${type} terms to ${v}? Every user will be required to re-accept on their next sign-in.`)) return;
+        try {
+          await ADMIN.api("update_terms_version", { terms_type: type, new_version: v.trim() });
+          flash("success", `${type} terms bumped to ${v}.`);
+          loadTerms();
+        } catch (e) { flash("error", e.message); }
+      };
+      $("bumpService").addEventListener("click", bump("service"));
+      $("bumpWebsite").addEventListener("click", bump("website"));
+    } catch (e) {
+      $("termsHost").innerHTML = `<p style="color:var(--el-danger,#B3261E);font-size:14px">${ADMIN.esc(e.message)}</p>`;
+    }
+  }
+
+  // ── Platform insight ─────────────────────────────────────────────────
+  function renderInsight(report) {
+    const c = report.content_json ?? {};
+    const list = (arr) => Array.isArray(arr) && arr.length ? `<ul>${arr.map((x) => `<li>${ADMIN.esc(String(x))}</li>`).join("")}</ul>` : "<p>—</p>";
+    return `
+      <div class="insight">
+        <div style="font-size:12px;color:var(--el-muted);margin-bottom:6px">Generated ${new Date(report.generated_at).toLocaleString("en-GB")}</div>
+        <p>${ADMIN.esc(c.summary ?? "")}</p>
+        <h4>Highlights</h4>${list(c.highlights)}
+        <h4>Concerns</h4>${list(c.concerns)}
+        <h4>Suggested improvements</h4>${list(c.suggested_improvements)}
+      </div>`;
+  }
+
+  async function loadInsights() {
+    try {
+      const res = await ADMIN.api("list_platform_insights");
+      $("insightHost").innerHTML = res.reports.length
+        ? renderInsight(res.reports[0])
+        : `<p style="font-size:14px;color:var(--el-muted)">No platform insight generated yet.</p>`;
+    } catch (e) {
+      $("insightHost").innerHTML = `<p style="color:var(--el-danger,#B3261E);font-size:14px">${ADMIN.esc(e.message)}</p>`;
+    }
+  }
+
+  $("insightBtn").addEventListener("click", async () => {
+    $("insightBtn").disabled = true;
+    $("insightBtn").textContent = "Generating… (~20s)";
+    try {
+      await ADMIN.api("generate_platform_insight");
+      flash("success", "Platform insight generated.");
+      await loadInsights();
+    } catch (e) {
+      flash("error", e.message);
+    } finally {
+      $("insightBtn").disabled = false;
+      $("insightBtn").textContent = "Generate Platform Insight";
+    }
+  });
+
+  $("reloadBtn").addEventListener("click", loadUsage);
+
+  loadUsage();
+  loadTerms();
+  loadInsights();
+</script>
+</body>
+</html>
