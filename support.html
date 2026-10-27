@@ -208,7 +208,7 @@ async function openThread(id) {
   const ll = res.landlord || {};
   const llName = ll.director_name || ll.contact_email || t.user_id;
   $("thSubject").textContent = t.subject;
-  $("thMeta").innerHTML = `${pill(t.status)} · ${ADMIN.esc(llName)} ${ll.contact_email ? `&lt;${ADMIN.esc(ll.contact_email)}&gt;` : ""} · plan ${ADMIN.esc(t.plan_at_open || "—")} · opened ${ADMIN.esc(fmt(t.created_at))} · category ${ADMIN.esc(t.category || "—")}`;
+  $("thMeta").innerHTML = `${pill(t.status)} · ${ADMIN.esc(llName)} ${ll.contact_email ? `&lt;${ADMIN.esc(ll.contact_email)}&gt;` : ""}${t.plan_at_open ? ` · plan ${ADMIN.esc(t.plan_at_open)}` : ""} · opened ${ADMIN.esc(fmt(t.created_at))} · category ${ADMIN.esc(t.category || "—")}`;
   // Hide the close-without-reply button on already-closed tickets.
   $("closeNoReplyBtn").style.display = (t.status === "closed") ? "none" : "";
 

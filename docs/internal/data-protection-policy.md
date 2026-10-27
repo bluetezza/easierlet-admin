@@ -1,7 +1,7 @@
 # EasierLet — Data Protection Policy
 
-**Owner:** Oakrise Estates Ltd (Company No. 16852456) trading as EasierLet
-**Last reviewed:** 2026-04-28
+**Owner:** Terry Baldwin, trading as easierLet (sole trader during early access)
+**Last reviewed:** 2026-10-27
 **Review cadence:** Annual, or after any significant change to platform or law
 **Contact:** privacy@easierlet.com
 
@@ -9,11 +9,11 @@
 
 ## 1. Scope
 
-This policy covers all personal data processed by EasierLet — the SwiftUI iOS app, the website at easierlet.com (including landlord and tenant portals), the admin dashboard at admin.easierlet.com, and all backend services (Supabase, Cloudflare R2, Resend, Stripe).
+This policy covers all personal data processed by EasierLet — the SwiftUI iOS app, the website at easierlet.com (including landlord and tenant portals), the admin dashboard at admin.easierlet.com, and all backend services (Supabase, Cloudflare R2, Resend, Anthropic).
 
 It applies to:
 
-- Landlord users (Oakrise Estates Ltd customers — currently only Terry Baldwin as the sole landlord)
+- Landlord users (landlords invited during early access)
 - Tenant users (current and former tenants of any property managed in EasierLet)
 - Prospective tenants (people who apply for or request a viewing of a property)
 - Referees (employers, previous landlords, guarantors named on a tenancy reference)
@@ -21,11 +21,10 @@ It applies to:
 
 **Roles under UK GDPR:**
 
-- **Data controller** for landlord account data: Oakrise Estates Ltd (EasierLet). Landlords sign up with us and we decide how their account data is used.
-- **Data controller** for tenant data: the **landlord** (Oakrise Estates Ltd in the current single-landlord configuration). Landlords decide which tenants they engage and what data they collect.
+- **Data controller** for landlord account data: Terry Baldwin, trading as easierLet. Landlords sign up with us and we decide how their account data is used.
+- **Data controller** for tenant data: the **landlord**. Landlords decide which tenants they engage and what data they collect.
 - **Data processor** for tenant data on behalf of landlords: EasierLet. We provide the tools but don't decide whose data is collected.
 
-(When EasierLet onboards external landlord customers, the platform acts as **processor** for those landlords' tenants.)
 
 ## 2. Legal basis for processing
 
@@ -42,7 +41,6 @@ For each processing purpose:
 | Sending operational emails (visit notices, reference forms, payment confirmations) | Contract / Legitimate interest | |
 | Marketing / sales communications | (Not currently used) | Would require fresh opt-in consent |
 | Audit logging | Legitimate interest + Legal obligation | Compliance, security, dispute resolution |
-| Subscription billing | Contract | Stripe is the processor |
 
 ## 3. Data inventory
 
@@ -79,19 +77,7 @@ Row-level security (RLS) is enabled on every table in the `public` schema except
 
 ## 5. Data retention schedule
 
-The full schedule lives in the `retention_rules` table in Postgres. Summary:
-
-| Data | Retention period | Legal basis |
-|---|---|---|
-| Active tenant data | 6 years after tenancy end | HMRC tax records + 6-year limitation period |
-| Rejected applicant data | 6 months | Allow re-application; no ongoing legitimate interest |
-| Tenant references | Same as tenant record | |
-| Gas Safety certificates | 2 years (current + previous) | Industry practice |
-| EICR certificates | 6 years | Replacement cycle + 1 year |
-| EPC certificates | Lifetime of certificate (10 years) | Statutory validity |
-| Viewing requests | 12 months | No ongoing need; anonymise prospect details |
-| Transactions | 7 years | HMRC requirement |
-| Audit logs | 7 years | Regulatory + dispute resolution |
+The full schedule lives in the `retention_rules` table in Postgres, and the public version is at https://easierlet.com/privacy/retention/. Keep the two in step. Landlord accounts that haven't been used for 12 months are deleted, with all their data, after a 30-day warning email (easierLet is free, so there are no trials or subscriptions to end).
 
 Enforcement runs nightly via the `retention-enforce` Edge Function (cron `0 3 * * *`, scheduled by `pg_cron`).
 
@@ -121,7 +107,7 @@ The export is a styled HTML report — the recipient uses Print → Save as PDF 
 If we suspect personal data has been compromised:
 
 1. **Within 1 hour** — assess scope. Which data, how many people, how it was exposed.
-2. **Within 4 hours** — contain. Rotate any leaked secrets (Supabase service-role key, Stripe key, Resend key), revoke compromised sessions, lock the affected accounts.
+2. **Within 4 hours** — contain. Rotate any leaked secrets (Supabase service-role key, Resend key, Anthropic key), revoke compromised sessions, lock the affected accounts.
 3. **Within 72 hours** — if the breach is high risk to data subjects, notify the ICO at https://ico.org.uk/for-organisations/report-a-breach/.
 4. **As soon as possible** — notify affected individuals if there's a high risk to their rights and freedoms. Plain English; avoid jargon.
 5. **Document everything** — timeline, what was exposed, who was notified, what we changed. Add to the breach register kept under `docs/internal/breaches/` (create when needed).
@@ -135,7 +121,6 @@ We process data via these third-party providers. Each requires a Data Processing
 | **Supabase** (Inc., USA + EU regions) | Auth, Postgres, Edge Functions, Storage | DPA in place via Supabase ToS |
 | **Cloudflare** (R2 storage) | Listing media + DSAR document hosting | DPA via Cloudflare ToS |
 | **Resend** (transactional email) | All system emails | DPA via Resend ToS |
-| **Stripe** (subscription billing) | Landlord billing | DPA via Stripe ToS |
 | **Vorensys** (referencing — Phase 1 deep-link) | Tenant referencing | Sub-processor — review their DPA before scaling |
 
 Annual review: confirm each DPA is current and that the provider's sub-processor list hasn't materially changed.

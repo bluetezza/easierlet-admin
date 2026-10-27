@@ -95,7 +95,7 @@
         name: l.director_name,
         email: l.contact_email,
         context: l.company_name || "—",
-        sub_status: l.subscription?.status || "—",
+        sub_status: "landlord",
       }));
       const tenantMatches = (tt.tenants || []).map((t) => ({
         type: "tenant",

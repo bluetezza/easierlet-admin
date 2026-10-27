@@ -37,14 +37,14 @@
     <div id="lProfile"><div class="spinner"></div></div>
   </div>
 
-  <div class="card" id="cardSubscription">
+  <div class="card" id="cardAccount">
     <div class="card-head">
       <div>
-        <div class="card-title">Subscription</div>
-        <div class="card-sub">Plan, status, trial, billing actions.</div>
+        <div class="card-title">Account</div>
+        <div class="card-sub">easierLet is free, so there's no plan or billing. Data export for access requests.</div>
       </div>
     </div>
-    <div id="lSub2"></div>
+    <div class="row-actions"><button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button></div>
   </div>
 
   <div class="card" id="cardProperties">
@@ -83,16 +83,6 @@
       </div>
     </div>
     <div id="lDocs"></div>
-  </div>
-
-  <div class="card" id="cardSubHistory">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Subscription history</div>
-        <div class="card-sub">Every plan + status transition. Tells you whether "expired" means an unconverted trial, or a paid sub that lapsed.</div>
-      </div>
-    </div>
-    <div id="lSubHistory"></div>
   </div>
 
   <div class="card" id="cardLoginActivity">
@@ -141,7 +131,6 @@
       $("lTitle").textContent = p.director_name || p.company_name || p.contact_email || "Landlord";
       $("lSub").textContent = `${p.contact_email || ""} · ${p.company_name || "—"}`;
 
-      const sub = data.subscription;
       const props = data.properties || [];
       const tenants = data.tenants || [];
       const docs = data.documents_summary || {};
@@ -156,7 +145,6 @@
         <div class="stat-tile" data-scroll="cardListings"  role="button" tabindex="0"><div class="label">Listings</div><div class="value">${listings.length}</div><div class="sub">${liveListings} live</div></div>
         <div class="stat-tile" data-scroll="cardTenants"   role="button" tabindex="0"><div class="label">Tenants</div><div class="value">${tenants.filter(t=>t.status!=='archived').length}</div></div>
         <div class="stat-tile" data-scroll="cardDocuments" role="button" tabindex="0"><div class="label">Documents</div><div class="value">${Object.values(docs).reduce((s,v)=>s+v.count,0)}</div></div>
-        <div class="stat-tile" data-scroll="cardSubscription" role="button" tabindex="0"><div class="label">Plan</div><div class="value" style="font-size:18px;font-family:var(--font-sans)">${ADMIN.esc(ADMIN.tierLabel(sub))}</div><div class="sub">${ADMIN.esc(sub?.status || '—')}</div></div>
       `;
       // Stat tiles scroll to relevant section.
       document.querySelectorAll("[data-scroll]").forEach((tile) => {
@@ -184,7 +172,6 @@
         </table>
       `;
 
-      $("lSub2").innerHTML = renderSubscription(sub);
       $("lProps").innerHTML = renderProperties(props, listings);
       $("lListings").innerHTML = renderListings(listings, propsById);
       $("lTenants").innerHTML = renderTenants(tenants);
@@ -201,102 +188,9 @@
           alertBox("error", e.message || "Could not open document.");
         } finally { b.disabled = false; b.textContent = orig; }
       }));
-      $("lSubHistory").innerHTML = renderSubscriptionHistory(data.subscription_events || []);
       $("lLoginActivity").innerHTML = renderLoginActivity(data.login_summary || null);
       $("lAudit").innerHTML = renderAudits(audits);
 
-      // Wire up extend trial
-      document.querySelectorAll("[data-extend]").forEach((b) => b.addEventListener("click", async () => {
-        const days = Number(b.dataset.extend);
-        b.disabled = true;
-        try {
-          await ADMIN.api("extend_trial", { landlord_id: landlordId, days });
-          alertBox("success", `Trial extended by ${days} days.`);
-          load();
-        } catch (e) {
-          alertBox("error", e.message || "Extension failed.");
-          b.disabled = false;
-        }
-      }));
-
-      // ── Trial-workflow testing tools ──
-      const trialResult = document.getElementById("trialTestResult");
-      const showTrialResult = (kind, msg) => {
-        trialResult.innerHTML = `<div class="alert ${kind}" style="margin-top:0">${ADMIN.esc(msg)}</div>`;
-      };
-
-      document.querySelectorAll("[data-trial-end]").forEach((b) => b.addEventListener("click", async () => {
-        const daysFromNow = Number(b.dataset.trialEnd);
-        b.disabled = true; const orig = b.textContent; b.textContent = "Setting…";
-        try {
-          const r = await ADMIN.api("set_trial_end", { landlord_id: landlordId, days_from_now: daysFromNow });
-          showTrialResult("success", `Trial set to end ${daysFromNow >= 0 ? `in ${daysFromNow} day(s)` : `${-daysFromNow} day(s) ago`}. Reminder stage reset. Click "Run trial-lifecycle now" to fire reminder/expiry emails.`);
-          load();
-        } catch (e) {
-          showTrialResult("error", e.message || "Couldn't set trial end.");
-        } finally { b.disabled = false; b.textContent = orig; }
-      }));
-
-      const runLifecycle = async (dryRun) => {
-        const buttons = [document.getElementById("runLifecycleBtn"), document.getElementById("runLifecycleDryBtn")];
-        buttons.forEach(b => { if (b) b.disabled = true; });
-        try {
-          const r = await ADMIN.api("run_trial_lifecycle", { mode: "all", dry_run: dryRun });
-          const summary = `Considered ${r.considered ?? 0}. Sent: 3-day=${r.reminder_3d ?? 0} · 1-day=${r.reminder_1d ?? 0} · expired=${r.expired ?? 0}${r.errors ? ` · errors=${r.errors}` : ""}.${dryRun ? " (dry-run — no emails sent, no DB writes)" : ""}`;
-          showTrialResult("success", summary);
-          load();
-        } catch (e) {
-          showTrialResult("error", e.message || "Lifecycle run failed.");
-        } finally {
-          buttons.forEach(b => { if (b) b.disabled = false; });
-        }
-      };
-      document.getElementById("runLifecycleBtn")?.addEventListener("click", () => runLifecycle(false));
-      document.getElementById("runLifecycleDryBtn")?.addEventListener("click", () => runLifecycle(true));
-
-      document.getElementById("cleanupDupesBtn")?.addEventListener("click", async () => {
-        if (!confirm("Cancel every active Stripe subscription on this customer except the most recent one?")) return;
-        const btn = document.getElementById("cleanupDupesBtn");
-        btn.disabled = true; btn.textContent = "Cancelling…";
-        try {
-          const r = await ADMIN.api("cleanup_duplicate_stripe_subs", { landlord_id: landlordId });
-          showTrialResult("success", r.cancelled
-            ? `Cancelled ${r.cancelled} duplicate sub(s). Kept ${r.kept}.`
-            : (r.message || "Already clean — nothing to cancel."));
-          load();
-        } catch (e) {
-          showTrialResult("error", e.message || "Cleanup failed.");
-        } finally { btn.disabled = false; btn.textContent = "🧹 Cancel duplicate Stripe subs"; }
-      });
-
-      document.getElementById("reconcileStripeBtn")?.addEventListener("click", async () => {
-        const btn = document.getElementById("reconcileStripeBtn");
-        btn.disabled = true; btn.textContent = "Reconciling…";
-        try {
-          const r = await ADMIN.api("reconcile_stripe", { landlord_id: landlordId });
-          if (r.found) {
-            showTrialResult("success", `Synced from Stripe — plan=${r.plan ?? "—"}, status=${r.status}, sub=${r.subscription_id}.`);
-            load();
-          } else {
-            showTrialResult("warn", r.message || "No active subscription found on Stripe — checkout was likely abandoned.");
-          }
-        } catch (e) {
-          showTrialResult("error", e.message || "Reconcile failed.");
-        } finally { btn.disabled = false; btn.textContent = "🔄 Reconcile from Stripe"; }
-      });
-
-      document.getElementById("resetTrialBtn")?.addEventListener("click", async () => {
-        if (!confirm("Reset this landlord to a fresh 14-day trial? Their current subscription state will be replaced.")) return;
-        const btn = document.getElementById("resetTrialBtn");
-        btn.disabled = true;
-        try {
-          await ADMIN.api("reset_trial", { landlord_id: landlordId });
-          showTrialResult("success", "Trial reset to a fresh 14-day window. Subscription back to 'trialing'.");
-          load();
-        } catch (e) {
-          showTrialResult("error", e.message || "Reset failed.");
-        } finally { btn.disabled = false; }
-      });
       document.getElementById("genDsarBtn")?.addEventListener("click", async () => {
         const btn = document.getElementById("genDsarBtn");
         btn.disabled = true; btn.textContent = "Generating…";
@@ -316,52 +210,6 @@
     } catch (e) {
       alertBox("error", e.message || "Couldn't load landlord.");
     }
-  }
-
-  function renderSubscription(sub) {
-    if (!sub) return `<div class="empty">No subscription record.</div>`;
-    const trial = sub.trial_ends_at ? Math.round((new Date(sub.trial_ends_at) - Date.now()) / 86400000) : null;
-    return `
-      <table class="table">
-        <tbody>
-          <tr><td><strong>Plan</strong></td><td>${ADMIN.esc(ADMIN.tierLabel(sub))} · ${ADMIN.statusPill(sub.status)}</td></tr>
-          <tr><td><strong>Lifecycle</strong></td><td><code>${ADMIN.esc(sub.plan ?? '—')}</code></td></tr>
-          <tr><td><strong>Property limit</strong></td><td>${sub.property_limit ?? '—'}</td></tr>
-          ${sub.trial_ends_at ? `<tr><td><strong>Trial ends</strong></td><td>${ADMIN.fmtDate(sub.trial_ends_at)} ${trial >= 0 ? `(${trial} days)` : '<span class="pill pill-red">Expired</span>'}</td></tr>` : ''}
-          ${sub.current_period_end ? `<tr><td><strong>Renews</strong></td><td>${ADMIN.fmtDate(sub.current_period_end)}</td></tr>` : ''}
-          ${sub.stripe_customer_id ? `<tr><td><strong>Stripe customer</strong></td><td><code>${ADMIN.esc(sub.stripe_customer_id)}</code></td></tr>` : ''}
-        </tbody>
-      </table>
-      <div class="row-actions" style="margin-top:14px">
-        <button class="btn btn-secondary" data-extend="14">Extend trial 14 days</button>
-        <button class="btn btn-secondary" data-extend="30">Extend trial 30 days</button>
-        <button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button>
-      </div>
-      <div style="margin-top:18px;padding:14px;background:#FFF8EC;border:1px dashed #F0D080;border-radius:10px;font-size:13px">
-        <div style="font-weight:600;margin-bottom:8px;color:#8A6000">🧪 Trial workflow testing</div>
-        <div style="color:#6B8278;margin-bottom:10px">Fast-forward this landlord's trial to test reminder emails + Stripe upgrade flow without waiting 14 days. Each "Set trial ends" call also resets the reminder stage so emails re-send.</div>
-        <div class="row-actions">
-          <button class="btn btn-secondary" data-trial-end="3">Set trial ends in 3 days</button>
-          <button class="btn btn-secondary" data-trial-end="1">Set trial ends in 1 day</button>
-          <button class="btn btn-secondary" data-trial-end="0">Set trial ended (today)</button>
-          <button class="btn btn-secondary" data-trial-end="-2">Set trial ended 2 days ago</button>
-        </div>
-        <div class="row-actions" style="margin-top:10px">
-          <button class="btn btn-primary" id="runLifecycleBtn">▶ Run trial-lifecycle now</button>
-          <button class="btn btn-ghost" id="runLifecycleDryBtn">Dry run (no emails / no DB writes)</button>
-          <button class="btn btn-secondary" id="resetTrialBtn">Reset to fresh 14-day trial</button>
-        </div>
-        <div class="row-actions" style="margin-top:10px">
-          <button class="btn btn-secondary" id="reconcileStripeBtn">🔄 Reconcile from Stripe</button>
-          <button class="btn btn-secondary" id="cleanupDupesBtn">🧹 Cancel duplicate Stripe subs</button>
-        </div>
-        <div style="font-size:12px;color:#6B8278;margin-top:6px">
-          <strong>Reconcile</strong> pulls the latest subscription state from Stripe by customer ID — fixes rows where a webhook was missed.
-          <strong>Cancel duplicates</strong> immediately cancels every active Stripe subscription except the most recent one (in case multiple were created accidentally).
-        </div>
-        <div id="trialTestResult" style="margin-top:10px"></div>
-      </div>
-    `;
   }
 
   function renderProperties(props, listings) {
@@ -505,49 +353,6 @@
     `;
 
     return summaryTable + fileTable;
-  }
-
-  function renderSubscriptionHistory(events) {
-    if (!events.length) return `<div class="empty">No subscription events recorded yet.</div>`;
-    const labelMap = {
-      trial_started:        "Trial started",
-      trial_extended:       "Trial extended",
-      trial_end_set:        "Trial end manually set",
-      trial_reset:          "Trial reset",
-      trial_expired:        "Trial expired (unconverted)",
-      trial_converted:      "Trial → Paid",
-      subscription_started: "Subscription started",
-      plan_changed:         "Plan changed",
-      status_changed:       "Status changed",
-      renewed:              "Renewed",
-      payment_failed:       "Payment failed",
-      reactivated:          "Reactivated",
-      cancelled:            "Cancelled",
-      expired:              "Expired (paid)",
-      stripe_reconciled:    "Reconciled with Stripe",
-    };
-    const sourceLabel = { signup: "signup", stripe_webhook: "Stripe", cron: "system", admin: "admin", system: "system" };
-    function transition(e) {
-      const planFrom = e.from_plan ?? "—", planTo = e.to_plan ?? "—";
-      const statusFrom = e.from_status ?? "—", statusTo = e.to_status ?? "—";
-      const planChange = (e.from_plan || e.to_plan) && e.from_plan !== e.to_plan
-        ? `<span style="color:var(--el-muted)">plan</span> ${ADMIN.esc(planFrom)} → <strong>${ADMIN.esc(planTo)}</strong>` : "";
-      const statusChange = (e.from_status || e.to_status) && e.from_status !== e.to_status
-        ? `<span style="color:var(--el-muted)">status</span> ${ADMIN.esc(statusFrom)} → <strong>${ADMIN.esc(statusTo)}</strong>` : "";
-      return [planChange, statusChange].filter(Boolean).join(" · ") || `<span style="color:var(--el-muted)">no field changes</span>`;
-    }
-    return `
-      <table class="table">
-        <thead><tr><th>When</th><th>Event</th><th>Transition</th><th>Source</th></tr></thead>
-        <tbody>${events.map((e) => `
-          <tr>
-            <td><div>${ADMIN.fmtDateTime(e.occurred_at)}</div><div style="color:var(--el-muted);font-size:12px">${ADMIN.relTime(e.occurred_at)}</div></td>
-            <td><strong>${ADMIN.esc(labelMap[e.event_type] || e.event_type)}</strong></td>
-            <td>${transition(e)}</td>
-            <td><code style="font-size:12px">${ADMIN.esc(sourceLabel[e.source] || e.source)}</code></td>
-          </tr>`).join("")}</tbody>
-      </table>
-    `;
   }
 
   function renderLoginActivity(summary) {

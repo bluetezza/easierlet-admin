@@ -37,7 +37,6 @@
       </div>
       <button class="btn btn-secondary" id="inviteOpenBtn">+ Invite landlord</button>
     </div>
-    <div id="landlordFilterChip"></div>
     <div class="field-row" style="grid-template-columns: 1fr auto; gap: 10px;">
       <input type="search" id="searchInput" placeholder="Search…" />
       <button class="btn btn-primary" id="searchBtn">Search</button>
@@ -49,7 +48,7 @@
   <div id="inviteBg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:flex-start;justify-content:center;padding:60px 20px;overflow-y:auto">
     <div style="background:white;border-radius:14px;width:100%;max-width:480px;padding:24px">
       <h2 style="font-family:var(--font-sans);font-weight:400;font-size:22px;margin:0 0 4px">Invite a landlord</h2>
-      <p class="card-sub" style="margin-bottom:16px">Creates the account and sends a branded "set your password" email. The new landlord lands on a 14-day trial.</p>
+      <p class="card-sub" style="margin-bottom:16px">Creates the account and sends a branded "set your password" email. easierLet is free, so there's no trial or billing to set up.</p>
       <div class="field"><label>Their name</label><input type="text" id="invName" placeholder="e.g. Jane Smith"></div>
       <div class="field"><label>Email</label><input type="email" id="invEmail" placeholder="jane@example.com"></div>
       <div class="field"><label>Company (optional)</label><input type="text" id="invCompany" placeholder="e.g. Smith Lettings Ltd"></div>
@@ -136,16 +135,6 @@
           <div class="value">${c.tenants}</div>
           <div class="sub">Search by name or email</div>
         </a>
-        <a href="?subscription_status=active#landlordList" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
-          <div class="label">Subscriptions</div>
-          <div class="value">${c.active}</div>
-          <div class="sub">+ ${c.trialing} trialing · ${c.past_due} past due</div>
-        </a>
-        <a href="?trial_ending_within_days=7#landlordList" class="stat-tile ${c.trial_ends_this_week > 0 ? 'warn' : ''}" role="button" tabindex="0" style="text-decoration:none;display:block">
-          <div class="label">Trials ending this week</div>
-          <div class="value">${c.trial_ends_this_week}</div>
-          <div class="sub">Next 7 days</div>
-        </a>
         <a href="/maintenance.html" class="stat-tile" role="button" tabindex="0" style="text-decoration:none;display:block">
           <div class="label">Open maintenance</div>
           <div class="value">${c.open_maintenance}</div>
@@ -184,44 +173,13 @@
     `;
   }
 
-  // Read URL params so the dashboard tiles can deep-link into a filtered list.
-  function readUrlFilter() {
-    const u = new URLSearchParams(location.search);
-    const sub = u.get("subscription_status");
-    const days = Number(u.get("trial_ending_within_days"));
-    return {
-      subscription_status: sub || null,
-      trial_ending_within_days: Number.isFinite(days) && days > 0 ? days : null,
-    };
-  }
-
-  function renderFilterChip() {
-    const f = readUrlFilter();
-    if (!f.subscription_status && !f.trial_ending_within_days) {
-      $("landlordFilterChip").innerHTML = "";
-      return;
-    }
-    const label = f.trial_ending_within_days
-      ? `Trials ending in next ${f.trial_ending_within_days} day${f.trial_ending_within_days === 1 ? '' : 's'}`
-      : `Status: ${f.subscription_status}`;
-    $("landlordFilterChip").innerHTML = `
-      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--el-green-pale);color:var(--el-green);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:500;margin-bottom:10px">
-        Filtered: ${ADMIN.esc(label)}
-        <a href="/dashboard.html#landlordList" style="color:var(--el-green);text-decoration:underline;font-size:12px">clear</a>
-      </div>`;
-  }
-
   async function loadLandlords(search = "") {
     $("landlordListBody").innerHTML = `<div class="spinner"></div>`;
-    renderFilterChip();
-    const f = readUrlFilter();
     try {
       const data = await ADMIN.api("list_landlords", {
         page: 1,
         per_page: 50,
         search,
-        subscription_status: f.subscription_status ?? undefined,
-        trial_ending_within_days: f.trial_ending_within_days ?? undefined,
       });
       if (!data.landlords.length) {
         $("landlordListBody").innerHTML = `<div class="empty">No landlords match.</div>`;
@@ -232,7 +190,7 @@
           <thead>
             <tr>
               <th>Name</th><th>Email</th><th>Company</th>
-              <th>Properties</th><th>Tenants</th><th>Plan</th><th>Status</th><th></th>
+              <th>Properties</th><th>Tenants</th><th>Joined</th><th></th>
             </tr>
           </thead>
           <tbody>${data.landlords.map((l) => `
@@ -242,8 +200,7 @@
               <td>${ADMIN.esc(l.company_name || "—")}</td>
               <td>${l.property_count_active}${l.property_count_archived ? ` <small style="color:var(--el-muted)">(+${l.property_count_archived} archived)</small>` : ""}</td>
               <td>${l.tenant_count}</td>
-              <td>${ADMIN.esc(ADMIN.tierLabel(l.subscription))}</td>
-              <td>${ADMIN.statusPill(l.subscription?.status ?? "—")}</td>
+              <td>${ADMIN.fmtDate(l.created_at)}</td>
               <td><a class="btn btn-secondary" href="/landlord.html?id=${ADMIN.esc(l.user_id)}">Open</a></td>
             </tr>`).join("")}</tbody>
         </table>
