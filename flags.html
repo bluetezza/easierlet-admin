@@ -53,7 +53,7 @@
     <div class="card-head">
       <div>
         <div class="card-title">All flags</div>
-        <div class="card-sub">Toggle = master switch. Rollout 0% = beta list only. Beta users: comma-separated user UUIDs.</div>
+        <div class="card-sub">Toggle = master switch. Rollout 0% = beta list only. Beta users: comma-separated user UUIDs. Flags marked Premium only also need the landlord to have Premium (switch it on from their landlord page).</div>
       </div>
       <button class="btn btn-secondary" id="reloadBtn">Reload</button>
     </div>
@@ -97,7 +97,7 @@
           ${flags.map((f, i) => `
             <tr>
               <td style="min-width:200px">
-                <div class="flag-key">${ADMIN.esc(f.key)}</div>
+                <div class="flag-key">${ADMIN.esc(f.key)}${f.premium_only ? ` <span class="pill pill-green" title="Costs money per use, so it only works for Premium landlords (and their tenants), whatever the rollout or beta list says.">Premium only</span>` : ""}</div>
                 <div class="flag-desc">${ADMIN.esc(f.description ?? "")}</div>
               </td>
               <td>

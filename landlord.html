@@ -41,10 +41,14 @@
     <div class="card-head">
       <div>
         <div class="card-title">Account</div>
-        <div class="card-sub">easierLet is free, so there's no plan or billing. Data export for access requests.</div>
+        <div class="card-sub">easierLet is free. Premium switches on the AI features, which cost you money each time they're used. There's no payment: you switch it on here.</div>
       </div>
     </div>
-    <div class="row-actions"><button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button></div>
+    <div id="lPremium" style="margin:0 0 12px"></div>
+    <div class="row-actions">
+      <button class="btn btn-secondary" id="premiumBtn" style="display:none"></button>
+      <button class="btn btn-primary" id="genDsarBtn">Generate DSAR</button>
+    </div>
   </div>
 
   <div class="card" id="cardProperties">
@@ -190,6 +194,7 @@
       }));
       $("lLoginActivity").innerHTML = renderLoginActivity(data.login_summary || null);
       $("lAudit").innerHTML = renderAudits(audits);
+      renderPremium(data.premium || null);
 
       document.getElementById("genDsarBtn")?.addEventListener("click", async () => {
         const btn = document.getElementById("genDsarBtn");
@@ -211,6 +216,35 @@
       alertBox("error", e.message || "Couldn't load landlord.");
     }
   }
+
+  // Premium = AI features on. premium is { granted_at, note } or null.
+  let premiumOn = false;
+  function renderPremium(premium) {
+    premiumOn = !!premium;
+    $("lPremium").innerHTML = premiumOn
+      ? `<span class="pill pill-green">Premium</span> <span style="color:var(--el-muted);font-size:13px">since ${ADMIN.esc(ADMIN.fmtDate(premium.granted_at))}${premium.note ? ` · ${ADMIN.esc(premium.note)}` : ""}</span>`
+      : `<span class="pill pill-grey">Free</span> <span style="color:var(--el-muted);font-size:13px">No AI features</span>`;
+    const btn = $("premiumBtn");
+    btn.style.display = "";
+    btn.textContent = premiumOn ? "Remove Premium" : "Give Premium";
+  }
+
+  $("premiumBtn").addEventListener("click", async () => {
+    const btn = $("premiumBtn");
+    const turningOn = !premiumOn;
+    const msg = turningOn
+      ? "Give this landlord Premium? Their AI features will work (where the AI flags are on), and their AI use is paid by you, up to their monthly AI cap. The change is logged."
+      : "Remove Premium? Their AI features stop straight away. The change is logged.";
+    if (!confirm(msg)) return;
+    btn.disabled = true;
+    try {
+      await ADMIN.api("set_premium", { landlord_id: landlordId, premium: turningOn });
+      renderPremium(turningOn ? { granted_at: new Date().toISOString(), note: null } : null);
+      alertBox("success", turningOn ? "Premium switched on." : "Premium removed.");
+    } catch (e) {
+      alertBox("error", e.message || "Couldn't change Premium.");
+    } finally { btn.disabled = false; }
+  });
 
   function renderProperties(props, listings) {
     if (!props.length) return `<div class="empty">No properties.</div>`;
